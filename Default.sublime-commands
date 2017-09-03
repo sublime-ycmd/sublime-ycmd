@@ -1,0 +1,16 @@
+[{
+    "caption": "Sublime YCMD (debug): List ycmd servers",
+    "command": "sublime_ycmd_list_servers"
+}, {
+    "caption": "Sublime YCMD (debug): Show file information",
+    "command": "sublime_ycmd_show_view_info"
+}, {
+    "caption": "Sublime YCMD (debug): Start ycmd server",
+    "command": "sublime_ycmd_start_server"
+}, {
+    "caption": "Sublime YCMD (debug): Reload plugin",
+    "command": "sublime_ycmd_reload_plugin"
+}, {
+    "caption": "Sublime YCMD (debug): List completer commands",
+    "command": "sublime_ycmd_list_completer_commands"
+}]

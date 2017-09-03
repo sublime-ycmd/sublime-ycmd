@@ -1,0 +1,31 @@
+{
+  // ycmd root directory
+  // e.g. ~/.vim/bundle/YouCompleteMe/third_party/ycmd
+  //      /usr/local/lib/ycmd
+  "ycmd_root_directory": "",
+
+  // ycmd default settings path
+  // if not set, it will be calculated using ycmd_path
+  "ycmd_default_settings_path": "",
+
+  // ycmd python binary path
+  // this must be the same python binary that was used when building ycmd
+  // if not set, the one in the system PATH will be used
+  "ycmd_python_binary_path": "",
+
+  // ycmd/plugin language whitelist
+  // if set, the plugin will only activate for these languages (based on the
+  // scope, see Tools -> Developer -> Show Scope Name)
+  // if not set (or if empty), the plugin will activate for all files
+  // in either case, the language blacklist will override these selections
+  "ycmd_language_whitelist": [
+    "source.c++",
+    "source.python",
+  ],
+
+  // ycmd/plugin language blacklist
+  // the plugin will ignore completion requests for these languages (based on
+  // the scope, see Tools -> Developer -> Show Scope Name)
+  // entries in the blacklist have higher priority than those in the whitelist
+  "ycmd_language_blacklist": []
+}

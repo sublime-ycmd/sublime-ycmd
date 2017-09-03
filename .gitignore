@@ -1,0 +1,7 @@
+# Compiled files
+__pycache__/
+*.py[cod]
+
+# Sublime files
+*.sublime-project
+*.sublime-workspace
