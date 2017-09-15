@@ -17,12 +17,13 @@ import io       # noqa: F401
 from lib.fs import (
     is_directory,
     is_file,
-    get_directory_name,
+    get_base_name,
     load_json_file,
     save_json_file,
     default_python_binary_path,
 )
 from lib.jsonmodels import (
+    SYrequestParameters,
     parse_completion_options,
 )
 from lib.process import (
@@ -89,7 +90,9 @@ class SYserver(object):
     connection to a ycmd server process. Provides a simple-ish way to send
     API requests to the backend, including control functions like stopping and
     pinging the server.
+
     TODO : Run all this stuff off-thread.
+    TODO : Unit tests.
     '''
 
     def __init__(self, process_handle=None,
@@ -147,23 +150,39 @@ class SYserver(object):
             YCMD_HMAC_HEADER: content_hmac,
         }
 
-    def _send_request(self, handler, params=None, method=None):
+    def _send_request(self, handler, request_params=None, method=None):
         '''
         Sends a request to the associated ycmd server and returns the response.
         The `handler` should be one of the ycmd handler constants.
-        If `params` are supplied, it should be either a string (to use )
+        If `request_params` are supplied, it should be an instance of
+        `SYrequestParameters`. Most handlers require these parameters, and ycmd
+        will reject any requests that are missing them.
         If `method` is provided, it should be an HTTP verb (e.g. 'GET',
         'POST'). If omitted, it is set to 'GET' when no parameters are given,
         and 'POST' otherwise.
         '''
-        has_params = params is not None
+        assert request_params is None or \
+            isinstance(request_params, SYrequestParameters), \
+            '[internal] request parameters is not SYrequestParameters: %r' % \
+            (request_params)
+        assert method is None or isinstance(method, str), \
+            '[internal] method is not a str: %r' % (method)
 
-        body = format_json(params) if has_params else None
+        has_params = request_params is not None
+
+        if has_params:
+            logger.debug('generating json body from parameters')
+            json_params = request_params.to_json()
+            body = format_json(json_params)
+        else:
+            json_params = None
+            body = None
+
         if isinstance(body, str):
             body = str_to_bytes(body)
 
         if not method:
-            method = 'GET' if not params else 'POST'
+            method = 'GET' if not has_params else 'POST'
 
         hmac_headers = self._generate_hmac_header(method, handler, body)
         content_type_headers = \
@@ -178,7 +197,7 @@ class SYserver(object):
         self._logger.debug(
             'about to send a request with '
             'method, handler, params, headers: %s, %s, %s, %s',
-            method, handler, truncate(params), truncate(headers),
+            method, handler, truncate(json_params), truncate(headers),
         )
 
         response_status = None
@@ -233,192 +252,83 @@ class SYserver(object):
 
         return response_data
 
-    def get_completer_commands(self):
+    def get_completer_commands(self, request_params):
         return self._send_request(
             YCMD_HANDLER_DEFINED_SUBCOMMANDS,
-            params={
-                'completer_target': 'identifier',
-            },
+            request_params=request_params,
             method='POST',
         )
 
-    def get_debug_info(self):
+    def get_debug_info(self, request_params):
         return self._send_request(
             YCMD_HANDLER_DEBUG_INFO,
-            params={},
+            request_params=request_params,
             method='POST',
         )
 
-    def get_code_completions(self, file_path,
-                             file_contents=None, file_types=None,
-                             line_num=1, column_num=1, extra_params=None):
-        if file_contents is None:
-            file_contents = ''
-        assert isinstance(file_contents, str), \
-            'file contents must be a str: %s' % (file_contents)
-        # TODO : Refactor between this and `_notify_event`.
-
-        if not file_types:
-            # TODO : Figure out the proper generic file type for ycmd.
-            self._logger.warning(
-                '[TODO] Using generic file type, might be wrong: text',
-            )
-            file_types = ['text']
-        elif not isinstance(file_types, (list, tuple)):
-            file_types = [file_types]
-        assert isinstance(file_types, (list, tuple)), \
-            'file types must be a list: %r' % (file_types)
-
-        assert extra_params is None or isinstance(extra_params, dict), \
-            'extra data must be a dict: %r' % (extra_params)
-
-        params = {
-            'filepath': file_path,
-            'file_data': {
-                file_path: {
-                    'filetypes': file_types,
-                    'contents': file_contents,
-                },
-            },
-
-            'line_num': line_num,
-            'column_num': column_num,
-        }
-
-        if extra_params:
-            params.update(extra_params)
+    def get_code_completions(self, request_params):
+        assert isinstance(request_params, SYrequestParameters), \
+            'request parameters must be SYrequestParameters: %r' % \
+            (request_params)
 
         completion_data = self._send_request(
             YCMD_HANDLER_GET_COMPLETIONS,
-            params=params,
+            request_params=request_params,
             method='POST',
         )
         self._logger.debug(
             'received completion results: %s', truncate(completion_data),
         )
 
-        # completions = parse_completion_options(completion_data, params)
-        self._logger.warning('[TODO] pass in request parameters')
-        completions = parse_completion_options(completion_data)
+        completions = parse_completion_options(completion_data, request_params)
         self._logger.debug('parsed completions: %r', completions)
 
         return completions
 
-    def _notify_event(self, event_name, file_path,
-                      file_contents=None, file_types=None,
-                      line_num=1, column_num=1, extra_params=None):
-        if file_contents is None:
-            file_contents = ''
-        assert isinstance(file_contents, str), \
-            'file contents must be a str: %s' % (file_contents)
-
-        if not file_types:
-            # TODO : Figure out the proper generic file type for ycmd.
-            self._logger.warning(
-                '[TODO] Using generic file type, might be wrong: text',
-            )
-            file_types = ['text']
-        elif not isinstance(file_types, (list, tuple)):
-            file_types = [file_types]
-        assert isinstance(file_types, (list, tuple)), \
-            'file types must be a list: %r' % (file_types)
-
-        assert extra_params is None or isinstance(extra_params, dict), \
-            'extra data must be a dict: %r' % (extra_params)
-
-        params = {
-            'event_name': event_name,
-
-            'filepath': file_path,
-            'file_data': {
-                file_path: {
-                    'filetypes': file_types,
-                    'contents': file_contents,
-                },
-            },
-
-            'line_num': line_num,
-            'column_num': column_num,
-        }
-
-        if extra_params:
-            params.update(extra_params)
+    def _notify_event(self, event_name, request_params, method='POST'):
+        assert isinstance(request_params, SYrequestParameters), \
+            'request parameters must be SYrequestParameters: %r' % \
+            (request_params)
 
         self._logger.debug(
             'sending event notification for event: %s', event_name,
         )
 
+        request_params['event_name'] = event_name
         return self._send_request(
             YCMD_HANDLER_EVENT_NOTIFICATION,
-            params=params,
-            method='POST',
+            request_params=request_params,
+            method=method,
         )
 
-    def notify_file_ready_to_parse(self, file_path,
-                                   file_contents=None, file_types=None,
-                                   line_num=1, column_num=1,
-                                   extra_params=None):
+    def notify_file_ready_to_parse(self, request_params):
         return self._notify_event(
             YCMD_EVENT_FILE_READY_TO_PARSE,
-            file_path=file_path,
-            file_contents=file_contents,
-            file_types=file_types,
-            line_num=line_num,
-            column_num=column_num,
-            extra_params=extra_params,
+            request_params=request_params,
         )
 
-    def notify_buffer_enter(self, file_path,
-                            file_contents=None, file_types=None,
-                            line_num=1, column_num=1, extra_params=None):
+    def notify_buffer_enter(self, request_params):
         return self._notify_event(
             YCMD_EVENT_BUFFER_VISIT,
-            file_path=file_path,
-            file_contents=file_contents,
-            file_types=file_types,
-            line_num=line_num,
-            column_num=column_num,
-            extra_params=extra_params,
+            request_params=request_params,
         )
 
-    def notify_buffer_leave(self, file_path,
-                            file_contents=None, file_types=None,
-                            line_num=1, column_num=1, extra_params=None):
+    def notify_buffer_leave(self, request_params):
         return self._notify_event(
             YCMD_EVENT_BUFFER_UNLOAD,
-            file_path=file_path,
-            file_contents=file_contents,
-            file_types=file_types,
-            line_num=line_num,
-            column_num=column_num,
-            extra_params=extra_params,
+            request_params=request_params,
         )
 
-    def notify_leave_insert_mode(self, file_path,
-                                 file_contents=None, file_types=None,
-                                 line_num=1, column_num=1, extra_params=None):
+    def notify_leave_insert_mode(self, request_params):
         return self._notify_event(
             YCMD_EVENT_INSERT_LEAVE,
-            file_path=file_path,
-            file_contents=file_contents,
-            file_types=file_types,
-            line_num=line_num,
-            column_num=column_num,
-            extra_params=extra_params,
+            request_params=request_params,
         )
 
-    def notify_current_identifier_finished(self, file_path,
-                                           file_contents=None, file_types=None,
-                                           line_num=1, column_num=1,
-                                           extra_params=None):
+    def notify_current_identifier_finished(self, request_params):
         return self._notify_event(
             YCMD_EVENT_CURRENT_IDENTIFIER_FINISHED,
-            file_path=file_path,
-            file_contents=file_contents,
-            file_types=file_types,
-            line_num=line_num,
-            column_num=column_num,
-            extra_params=extra_params,
+            request_params=request_params,
         )
 
     @property
@@ -620,27 +530,31 @@ def start_ycmd_server(ycmd_root_directory,
     temp_file_object.close()
 
     logger.critical('[REMOVEME] generating temporary files for log output')
-    '''
-    stdout_file_object = tempfile.NamedTemporaryFile(
-        prefix='ycmd_stdout_', suffix='.log', delete=False,
-    )
-    stderr_file_object = tempfile.NamedTemporaryFile(
-        prefix='ycmd_stderr_', suffix='.log', delete=False,
-    )
-    stdout_file_name = stdout_file_object.name
-    stderr_file_name = stderr_file_object.name
-    stdout_file_object.close()
-    stderr_file_object.close()
-    '''
-    tempdir = tempfile.gettempdir()
-    alnum_working_directory = \
-        ''.join(c if c.isalnum() else '_' for c in working_directory)
-    stdout_file_name = os.path.join(
-        tempdir, 'ycmd_stdout_%s.log' % (alnum_working_directory)
-    )
-    stderr_file_name = os.path.join(
-        tempdir, 'ycmd_stderr_%s.log' % (alnum_working_directory)
-    )
+
+    # toggle-able log file naming scheme
+    # use whichever to test/debug
+    _GENERATE_UNIQUE_TMPLOGS = False
+    if _GENERATE_UNIQUE_TMPLOGS:
+        stdout_file_object = tempfile.NamedTemporaryFile(
+            prefix='ycmd_stdout_', suffix='.log', delete=False,
+        )
+        stderr_file_object = tempfile.NamedTemporaryFile(
+            prefix='ycmd_stderr_', suffix='.log', delete=False,
+        )
+        stdout_file_name = stdout_file_object.name
+        stderr_file_name = stderr_file_object.name
+        stdout_file_object.close()
+        stderr_file_object.close()
+    else:
+        tempdir = tempfile.gettempdir()
+        alnum_working_directory = \
+            ''.join(c if c.isalnum() else '_' for c in working_directory)
+        stdout_file_name = os.path.join(
+            tempdir, 'ycmd_stdout_%s.log' % (alnum_working_directory)
+        )
+        stderr_file_name = os.path.join(
+            tempdir, 'ycmd_stderr_%s.log' % (alnum_working_directory)
+        )
 
     logger.critical(
         '[REMOVEME] keeping log files for stdout, stderr: %s, %s',
@@ -650,7 +564,7 @@ def start_ycmd_server(ycmd_root_directory,
     ycmd_process_handle = SYprocess()
     ycmd_server_hostname = '127.0.0.1'
     ycmd_server_port = _get_unused_port(ycmd_server_hostname)
-    ycmd_server_label = get_directory_name(working_directory)
+    ycmd_server_label = get_base_name(working_directory)
 
     ycmd_process_handle.binary = ycmd_python_binary_path
     ycmd_process_handle.args.extend([

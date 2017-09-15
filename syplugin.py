@@ -570,16 +570,16 @@ class SublimeYcmdState(object):
             logger.debug('file is not ready for parsing, ignoring')
             return False
 
-        notify_params = view.to_file_params()
-        if not notify_params:
-            logger.debug('failed to generate notification params, abort')
+        request_params = view.generate_request_parameters()
+        if not request_params:
+            logger.debug('failed to generate request params, abort')
             return False
 
         if not self._view_manager.has_notified_ready_to_parse(view, server):
             logger.debug(
                 'file has not been sent to the server yet, doing that first'
             )
-            server.notify_file_ready_to_parse(**notify_params)
+            server.notify_file_ready_to_parse(request_params)
             self._view_manager.set_notified_ready_to_parse(view, server)
         else:
             logger.debug(
@@ -587,7 +587,7 @@ class SublimeYcmdState(object):
             )
 
         logger.debug('sending notification for entering buffer')
-        server.notify_buffer_enter(**notify_params)
+        server.notify_buffer_enter(request_params)
         return True
 
     def deactivate_view(self, view):
@@ -615,15 +615,16 @@ class SublimeYcmdState(object):
             logger.debug('file is not ready for parsing, ignoring')
             return False
 
-        notify_params = view.to_file_params()
-        if not notify_params:
-            logger.debug('failed to generate notification params, abort')
+        request_params = view.generate_request_parameters()
+        if not request_params:
+            logger.debug('failed to generate request params, abort')
             return False
 
         # NOTE : Technically, this only has to be done when the buffer is
         #        different than it was when it was activated. But to keep it
         #        simple, we'll just check if it's dirty...
         #        (Not optimal, but good enough.)
+        # TODO : Store the last `view.change_count()` to do the comparison.
         if view.dirty():
             logger.debug(
                 'file has unsaved changes, '
@@ -638,7 +639,7 @@ class SublimeYcmdState(object):
                 )
 
         logger.debug('sending notification for unloading buffer')
-        server.notify_buffer_leave(**notify_params)
+        server.notify_buffer_leave(request_params)
         return True
 
     def completions_for_view(self, view):
@@ -668,31 +669,26 @@ class SublimeYcmdState(object):
             logger.debug('file is not ready for parsing, abort')
             return None
 
-        completion_params = view.to_file_params()
-        if not completion_params:
-            logger.debug('failed to generate completion params, abort')
-            return None
+        request_params = view.generate_request_parameters()
+        if not request_params:
+            logger.debug('failed to generate request params, abort')
+            return False
 
         if not self._view_manager.has_notified_ready_to_parse(view, server):
             logger.debug(
                 'file has not been sent to the server yet, '
                 'probably missed a view event'
             )
-            server.notify_file_ready_to_parse(**completion_params)
+            server.notify_file_ready_to_parse(request_params)
             self._view_manager.set_notified_ready_to_parse(view, server)
 
         logger.debug('sending completion request for view')
-        completions = server.get_code_completions(**completion_params)
+        completions = server.get_code_completions(request_params)
         logger.debug('got completions for view: %s', completions)
-
-        # TODO : Turn it on after disabling anaconda
-        if 'python' in view.file_types:
-            logger.critical('[TODO] enable for python, disable anaconda')
-            return None
 
         # TODO : Gracefully handle this by returning None
         assert isinstance(completions, SYcompletions), \
-            '[todo] completions must be SYcompletions: %r' % (completions)
+            '[TODO] completions must be SYcompletions: %r' % (completions)
 
         def _st_completion_tuple(completion):
             assert isinstance(completion, SYcompletionOption), \
@@ -712,6 +708,12 @@ class SublimeYcmdState(object):
         logger.critical(
             '[REMOVEME] generated completion data: %s', st_completion_list,
         )
+
+        # TODO : Turn it on after disabling anaconda
+        if 'python' in view.file_types:
+            logger.critical('[TODO] enable for python, disable anaconda')
+            return None
+
         return st_completion_list
 
     def __contains__(self, view):
@@ -916,7 +918,7 @@ class SublimeYcmdCompleter(sublime_plugin.EventListener):
             # TODO : Use `locations` instead of the cursor position.
             completion_options = state.completions_for_view(view)
         except Exception as e:
-            logger.debug('failed to get completions: %s', e)
+            logger.debug('failed to get completions: %s', e, exc_info=e)
 
         logger.debug('got completions: %s', completion_options)
 

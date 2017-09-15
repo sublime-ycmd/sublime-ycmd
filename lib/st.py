@@ -14,6 +14,9 @@ from lib.fs import (
     resolve_binary_path,
     default_python_binary_path,
 )
+from lib.jsonmodels import (
+    SYrequestParameters,
+)
 from lib.ycmd import (
     get_ycmd_default_settings_path,
 )
@@ -372,6 +375,73 @@ class SYview(object):
             'line_num': line_num,
             'column_num': column_num,
         }
+
+    def generate_request_parameters(self):
+        '''
+        Generates and returns file-related `SYrequestParameters` for use in the
+        `SYserver` handlers.
+        These parameters include information about the file like the name,
+        contents, and file type(s). Additional parameters may still be added to
+        the result before passing it off to the server.
+
+        TODO : Use cached values whenever possible.
+        '''
+        if not self._view:
+            logger.error('no view handle has been set')
+            return None
+
+        view = self._view
+        file_path = view.file_name()
+        if not file_path:
+            logger.debug(
+                'view is not associated with a file, using its ID instead'
+            )
+            file_path = 'buffer_%s' % (str(view.buffer_id()))
+
+        if not view.is_primary():
+            logger.warning(
+                'generating parameters for non-primary view, '
+                'they should generally be ignored...'
+            )
+
+        if view.is_loading():
+            logger.warning(
+                'file is still loading, supplying empty contents for: %s',
+                file_path,
+            )
+            file_contents = ''
+            file_types = None
+        else:
+            file_region = sublime.Region(0, view.size())
+            file_contents = view.substr(file_region)
+            file_types = get_file_types(view)
+
+        file_selections = view.sel()    # type: sublime.Selection
+        if not file_selections:
+            logger.warning(
+                'no selections available, '
+                'using default line and column numbers'
+            )
+            line_num = 1
+            column_num = 1
+        else:
+            # arbitrarily use the first selection as the position
+            file_region = file_selections[0]    # type: sublime.Region
+            file_point = file_region.begin()
+            file_row, file_col = view.rowcol(file_point)
+            logger.debug('found file line, col: %s, %s', file_row, file_col)
+
+            # ycmd expects 1-based indices, and sublime returns 0-based
+            line_num = file_row + 1
+            column_num = file_col + 1
+
+        return SYrequestParameters(
+            file_path=file_path,
+            file_contents=file_contents,
+            file_types=file_types,
+            line_num=line_num,
+            column_num=column_num,
+        )
 
     @property
     def view(self):
