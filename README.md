@@ -38,7 +38,12 @@ To run the unit-test suite, simply execute `runtests.py`:
 python runtests.py
 ```
 
+The tests are not yet complete. It tests some basic low-level operations, but
+does not test any of the plugin behaviour.
+
 **TODO** Flags for controlling test list and logging.
 
 ## Contributing
 Ensure that unit tests still pass, and that `pylint` does not report issues.
+
+**TODO** Fix code so it actually passes `pylint`...

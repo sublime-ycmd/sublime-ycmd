@@ -812,7 +812,7 @@ class SublimeYcmdState(object):
 
         if hasattr(locations, '__iter__'):
             return all(map(_enabled_for_location, locations))
-        return _enabled_for_location(self, view, locations)
+        return _enabled_for_location(locations)
 
     # NOTE : Rest of the methods are for debugging/testing.
     #        Do not build on top of them!
@@ -977,7 +977,7 @@ class SublimeYcmdListServersCommand(sublime_plugin.TextCommand):
 
         raise NotImplementedError('unimplemented: display servers')
 
-    def description():
+    def description(self):
         return 'list ycmd servers'
 
 
