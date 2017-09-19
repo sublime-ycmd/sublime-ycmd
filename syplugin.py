@@ -13,45 +13,37 @@ import sys
 sys.path.append(os.path.dirname(__file__))  # noqa: E402
 
 from cli.args import base_cli_argparser
-from lib.jsonmodels import (
-    SYcompletions,
-    SYcompletionOption,
+from lib.util.log import (
+    get_smart_truncate_formatter,
 )
-from lib.logutils import (
-    get_default_datefmt,
-    get_extended_messagefmt,
-    register_extension_filters,
+from lib.schema import (
+    Completions,
+    CompletionOption,
 )
-from lib.st import (
-    SYsettings,
-    SYview,
+from lib.subl.settings import (
+    Settings,
     bind_on_change_settings,
+)
+from lib.subl.view import (
+    View,
     get_view_id,
     get_path_for_view,
 )
-from lib.ycmd import (
-    SYserver,
+from lib.ycmd.server import Server
+from lib.ycmd.start import (
     start_ycmd_server,
 )
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
-# TODO : refactor import wrapper logic
 try:
     import sublime
     import sublime_plugin
     _HAS_LOADED_ST = True
 except ImportError:
-    import collections
+    from lib.subl.dummy import sublime
+    from lib.subl.dummy import sublime_plugin
     _HAS_LOADED_ST = False
-
-    class EventListenerDummy(object):
-        pass
-
-    sublime = {}
-    SublimePluginDummy = \
-        collections.namedtuple('SublimePluginDummy', ['EventListener'])
-    sublime_plugin = SublimePluginDummy(EventListenerDummy)
 finally:
     assert isinstance(_HAS_LOADED_ST, bool)
 
@@ -94,13 +86,9 @@ def configure_logging(log_level=None, output_stream=None):
     # Don't log after here! Extension filters not set up yet
     logger_stream = logging.StreamHandler(stream=output_stream)
     logger_stream.setLevel(log_level)
-    logger_formatter = logging.Formatter(
-        fmt=get_extended_messagefmt(),
-        datefmt=get_default_datefmt(),
-    )
+    logger_formatter = get_smart_truncate_formatter()
     logger_stream.setFormatter(logger_formatter)
     logger_instance.addHandler(logger_stream)
-    register_extension_filters(logger_stream)
     # Safe to log again
 
     logger.debug('successfully configured logging')
@@ -124,7 +112,7 @@ class SublimeYcmdServerManager(object):
               ycmd_python_binary_path=None):
         if self._servers:
             for server in self._servers:
-                if not isinstance(server, SYserver):
+                if not isinstance(server, Server):
                     logger.error(
                         'invalid server handle, clearing it: %r', server
                     )
@@ -161,17 +149,17 @@ class SublimeYcmdServerManager(object):
 
     def get_servers(self):
         '''
-        Returns a shallow-copy of the list of managed `SYserver` instances.
+        Returns a shallow-copy of the list of managed `Server` instances.
         '''
         return self._servers[:]
 
-    def get_server_for_view(self, view):    # type (sublime.View) -> SYserver
+    def get_server_for_view(self, view):    # type (sublime.View) -> Server
         '''
-        Returns a `SYserver` instance that has a suitable working directory for
+        Returns a `Server` instance that has a suitable working directory for
         use with the supplied `view`.
         If one does not exist, it will be created.
         '''
-        if not isinstance(view, (sublime.View, SYview)):
+        if not isinstance(view, (sublime.View, View)):
             raise TypeError('view must be a View: %r' % (view))
 
         view_id = get_view_id(view)
@@ -217,11 +205,11 @@ class SublimeYcmdServerManager(object):
         self._view_id_to_server[view_id] = server
         self._working_directory_to_server[view_working_dir] = server
 
-        return server   # type: SYserver
+        return server   # type: Server
 
     def _unregister_server(self, server):
-        assert isinstance(server, SYserver), \
-            '[internal] server must be SYserver: %r' % (server)
+        assert isinstance(server, Server), \
+            '[internal] server must be Server: %r' % (server)
         if server not in self._servers:
             logger.error(
                 'server was never registered in server manager: %s',
@@ -260,7 +248,7 @@ class SublimeYcmdServerManager(object):
         return view_id in self._view_id_to_server
 
     def __getitem__(self, view):
-        return self.get_server_for_view(view)   # type: SYserver
+        return self.get_server_for_view(view)   # type: Server
 
     def __len__(self):
         return len(self._servers)
@@ -269,14 +257,14 @@ class SublimeYcmdServerManager(object):
 class SublimeYcmdViewManager(object):
     '''
     Singleton helper class. Manages wrappers around sublime view instances.
-    The wrapper class `SYview` is used around `sublime.View` to cache certain
+    The wrapper class `View` is used around `sublime.View` to cache certain
     calculations, and to store view-specific variables/state.
     Although this abstraction isn't strictly necessary, it can save expensive
     operations like file path calculation and ycmd event notification.
     '''
 
     def __init__(self):
-        # maps view IDs to `SYview` instances
+        # maps view IDs to `View` instances
         self._views = {}
         self.reset()
 
@@ -293,18 +281,18 @@ class SublimeYcmdViewManager(object):
 
     def get_wrapped_view(self, view):
         '''
-        Returns an instance of `SYview` corresponding to `view`. If one does
+        Returns an instance of `View` corresponding to `view`. If one does
         not exist, it will be created, if possible.
         If the view is provided as an ID (int), then the lookup is performed
         as normal, but a `KeyError` will be raised if it does not exist.
         If the view is an instance of `sublime.View`, then the lookup is again
         performed as usual, but will be created if it does not exist.
-        Finally, if the view is an instance of `SYview`, it is returned as-is.
+        Finally, if the view is an instance of `View`, it is returned as-is.
         '''
-        assert isinstance(view, (int, sublime.View, SYview)), \
+        assert isinstance(view, (int, sublime.View, View)), \
             'view must be a View: %r' % (view)
 
-        if isinstance(view, SYview):
+        if isinstance(view, View):
             return view
 
         view_id = get_view_id(view)
@@ -320,12 +308,12 @@ class SublimeYcmdViewManager(object):
                 raise KeyError('view id is not registered: %r' % (view_id))
 
             logger.debug('view is not registered, creating a wrapper for it')
-            wrapped_view = SYview(view)
+            wrapped_view = View(view)
             self._views[view_id] = wrapped_view
 
         assert view_id in self._views, \
             '[internal] view id was not registered properly: %r' % (view_id)
-        return self._views[view_id]     # type: SYview
+        return self._views[view_id]     # type: View
 
     def has_notified_ready_to_parse(self, view, server):
         '''
@@ -347,7 +335,7 @@ class SublimeYcmdViewManager(object):
             logger.debug('view has not been sent to any server: %s', view)
             return False
 
-        # accept servers either as strings or as `SYserver` instances:
+        # accept servers either as strings or as `Server` instances:
         supplied_server_key = str(server)
         notified_server_key = view['last_notified_server']
 
@@ -400,7 +388,7 @@ class SublimeYcmdViewManager(object):
             # initialize, but leave it empty
             view['notified_servers'] = {}
 
-        # accept servers either as strings or as `SYserver` instances:
+        # accept servers either as strings or as `Server` instances:
         supplied_server_key = str(server)
 
         notified_server_key = view['last_notified_server']
@@ -421,7 +409,7 @@ class SublimeYcmdViewManager(object):
             del notified_servers[supplied_server_key]
 
     def _register_view(self, view):
-        assert isinstance(view, (sublime.View, SYview)), \
+        assert isinstance(view, (sublime.View, View)), \
             'view must be a View: %r' % (view)
 
         view_id = get_view_id(view)
@@ -433,8 +421,8 @@ class SublimeYcmdViewManager(object):
             logger.warning('view has already been registered, id: %s', view_id)
 
         if isinstance(view, sublime.View):
-            view = SYview(view)
-        elif not isinstance(view, SYview):
+            view = View(view)
+        elif not isinstance(view, View):
             logger.error('unknown view type: %r', view)
             raise TypeError('view must be a View: %r' % (view))
 
@@ -458,7 +446,7 @@ class SublimeYcmdViewManager(object):
 
     def get_views(self):
         '''
-        Returns a shallow-copy of the map of managed `SYview` instances.
+        Returns a shallow-copy of the map of managed `View` instances.
         '''
         return self._views.copy()
 
@@ -501,7 +489,7 @@ class SublimeYcmdState(object):
     def configure(self, settings):
         '''
         Receives a `settings` object and reconfigures the state from it.
-        The settings should be an instance of `SYsettings`. See `lib.st` for
+        The settings should be an instance of `Settings`. See `lib.st` for
         helpers to generate these settings.
         If there are changes to the ycmd server settings, then the state will
         automatically stop all currently running servers. They will be
@@ -527,8 +515,8 @@ class SublimeYcmdState(object):
                 of the constants from the `logging` module: 'DEBUG', 'INFO',
                 'WARNING', 'ERROR', 'CRITICAL'.
         '''
-        assert isinstance(settings, SYsettings), \
-            'settings must be SYsettings: %r' % (settings)
+        assert isinstance(settings, Settings), \
+            'settings must be Settings: %r' % (settings)
 
         requires_restart = self._requires_ycmd_restart(settings)
         if requires_restart:
@@ -557,8 +545,8 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, ignoring activate event')
             return False
 
-        server = self._server_manager[view]     # type: SYserver
-        view = self._view_manager[view]         # type: SYview
+        server = self._server_manager[view]     # type: Server
+        view = self._view_manager[view]         # type: View
         if not server:
             logger.debug('no server for view, ignoring activate event')
             return False
@@ -602,8 +590,8 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, ignoring deactivate event')
             return False
 
-        server = self._server_manager[view]     # type: SYserver
-        view = self._view_manager[view]         # type: SYview
+        server = self._server_manager[view]     # type: Server
+        view = self._view_manager[view]         # type: View
         if not server:
             logger.debug('no server for view, ignoring deactivate event')
             return False
@@ -656,8 +644,8 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, cannot provide completions')
             return None
 
-        server = self._server_manager[view]     # type: SYserver
-        view = self._view_manager[view]         # type: SYview
+        server = self._server_manager[view]     # type: Server
+        view = self._view_manager[view]         # type: View
         if not server:
             logger.debug('no server for view, cannot request completions')
             return None
@@ -687,12 +675,12 @@ class SublimeYcmdState(object):
         logger.debug('got completions for view: %s', completions)
 
         # TODO : Gracefully handle this by returning None
-        assert isinstance(completions, SYcompletions), \
-            '[TODO] completions must be SYcompletions: %r' % (completions)
+        assert isinstance(completions, Completions), \
+            '[TODO] completions must be Completions: %r' % (completions)
 
         def _st_completion_tuple(completion):
-            assert isinstance(completion, SYcompletionOption), \
-                '[internal] completion is not SYcompletionOption: %r' % \
+            assert isinstance(completion, CompletionOption), \
+                '[internal] completion is not CompletionOption: %r' % \
                 (completion)
             # TODO : Calculate trigger properly
             st_trigger = completion.text()
@@ -722,7 +710,7 @@ class SublimeYcmdState(object):
 
     def __getitem__(self, view):
         ''' Wrapper around server manager. '''
-        return self._server_manager[view]   # type: SYserver
+        return self._server_manager[view]   # type: Server
 
     def __len__(self):
         ''' Wrapper around server manager. '''
@@ -738,14 +726,14 @@ class SublimeYcmdState(object):
         ycmd servers. This basically just compares the settings to the internal
         copy of the settings, and returns true if any ycmd parameters differ.
         '''
-        assert isinstance(settings, SYsettings), \
-            '[internal] settings must be SYsettings: %r' % (settings)
+        assert isinstance(settings, Settings), \
+            '[internal] settings must be Settings: %r' % (settings)
 
         if not self._settings:
             # no settings - always trigger restart
             return True
-        assert isinstance(self._settings, SYsettings), \
-            '[internal] settings must be SYsettings: %r' % (self._settings)
+        assert isinstance(self._settings, Settings), \
+            '[internal] settings must be Settings: %r' % (self._settings)
 
         return self._settings != settings
 
@@ -849,10 +837,10 @@ class SublimeYcmdState(object):
 
     def lookup_view(self, view):
         '''
-        Returns a wrapped `SYview` for the given `sublime.View` in the view
+        Returns a wrapped `View` for the given `sublime.View` in the view
         manager, if one exists. Does NOT create one if it doesn't exist, just
         returns None.
-        If `view` is already a `SYview`, it is returned as-is.
+        If `view` is already a `View`, it is returned as-is.
         '''
         view_manager = self._view_manager
         if view in view_manager:

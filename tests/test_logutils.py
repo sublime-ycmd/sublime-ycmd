@@ -7,49 +7,86 @@ Unit tests for the log utils module.
 import logging
 import unittest
 
-import lib.logutils
-import tests.utils
+from lib.util.log import (
+    SmartTruncateFormatter,
+    FormatField,
+    parse_fields,
+)
+from tests.utils import (
+    applytestfunction,
+    logtest,
+)
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 
-def get_dummy_log_record():
+def make_log_record(msg='', **kwargs):
+    log_record = logging.LogRecord(
+        name=__name__, pathname=__file__, lineno=1,
+        level=logging.DEBUG, msg=msg, args=kwargs,
+        exc_info=None, func=None, sinfo=None,
+    )
+
+    for k, v in kwargs.items():
+        setattr(log_record, k, v)
+
+    return log_record
+
+
+def make_format_field(name=None, zero=None, minus=None, space=None,
+                      plus=None, width=None, point=None, type=None):
+    return FormatField(
+        name=name, zero=zero, minus=minus, space=space,
+        plus=plus, width=width, point=point, type=type,
+    )
+
+
+class TestFieldIterator(unittest.TestCase):
     '''
-    Generates and returns a dummy log record for use in tests. These dummy
-    records contain a couple of extra parameters to play around with.
-    '''
-    dummy_log_record = \
-        logging.LogRecord(name=__name__, level=logging.DEBUG,
-                          pathname=__file__, lineno=1,
-                          msg='dummy log record! x = %(x)s, y = %(y)s',
-                          args={'x': 'hello', 'y': 'world'},
-                          exc_info=None, func=None, sinfo=None)
-    setattr(dummy_log_record, 'x', 'hello')
-    setattr(dummy_log_record, 'y', 'world')
-
-    return dummy_log_record
-
-
-class SYTlogPropertyShortener(unittest.TestCase):
-    '''
-    Unit tests for the log-property shortening filter. This filter will shorten
-    a LogRecord property to a target length.
+    Unit tests for the log-format field iterator. This iterator should extract
+    information about each field in a format string.
     '''
 
-    @tests.utils.logtest('log-property shortener : in-place shorten property')
-    def test_lps_valid_property(self):
-        ''' Ensures that valid properties/target-lengths get shortened. '''
-        x_shortener = lib.logutils.SYlogPropertyShortener()
-        x_shortener.set_property('x').set_length(1)
+    @logtest('log-format field iterator : simple percent')
+    def test_fi_simple_percent(self):
+        ''' Ensures that single-item `%`-format fields are parsed. '''
 
-        dummy = get_dummy_log_record()
-        initial_x = getattr(dummy, 'x')
+        single_fields = [
+            ('%(foo)15s', make_format_field(name='foo', width='15', type='s')),
+            ('% 5ld', make_format_field(space=' ', width='5', type='ld')),
+            ('%-2s', make_format_field(minus='-', width='2', type='s')),
+        ]
+        single_field_args = [
+            (f, {}) for f in single_fields
+        ]
 
-        result = x_shortener.filter(dummy)
-        self.assertTrue(result, 'utility filter should always return True')
+        def test_lffi_single_percent(field, expected):
+            result = next(parse_fields(field))
+            self.assertEqual(expected, result)
 
-        result_x = getattr(dummy, 'x')
-        expected_x = initial_x[0]
+        applytestfunction(
+            self, test_lffi_single_percent, single_field_args,
+        )
 
-        self.assertEqual(expected_x, result_x,
-                         'filter did not shorten property to 1 letter')
+
+class TestTruncateFormatter(unittest.TestCase):
+    '''
+    Unit tests for the log smart-truncate formatter. This formatter should try
+    to truncate fields that are longer than the target field width.
+    '''
+
+    @logtest('log smart-truncate formatter : simple fields')
+    def test_tf_simple_percent_fields(self):
+        ''' Ensures that simple %-style field widths are handled. '''
+
+        format_string = '%(short)4s %(long)-8s'
+        formatter = SmartTruncateFormatter(fmt=format_string, props={
+            'short': 4,
+            'long': 8,
+        })
+
+        record = make_log_record(short='hello', long='world')
+        formatted = formatter.format(record)
+
+        expected = ' hll world   '
+        self.assertEqual(expected, formatted)

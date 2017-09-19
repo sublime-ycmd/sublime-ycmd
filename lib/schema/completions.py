@@ -1,235 +1,24 @@
 #!/usr/bin/env python3
 
 '''
-lib/jsonmodels.py
-Wrappers around the JSON messages passed between this plugin and ycmd. Provides
-concrete classes with attributes to make it easier to work with the arbitrary
-keys in the ycmd API.
+lib/schema/completions.py
+Schema definition for responses from completion requests.
 '''
 
 import logging
 
-from lib.strutils import (
-    parse_json,
-)
+from lib.schema.request import RequestParameters
+from lib.util.format import json_parse
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 
-class SYrequestParameters(object):
+class Completions(object):
     '''
-    Wrapper around JSON parameters used in ycmd requests.
-    All requests need to have certain parameters for the ycmd server to even
-    consider handling. These parameters are given default values if they are
-    not filled in by the time it gets serialized to JSON. Setting parameters
-    will also automatically validate that they are the right type.
-
-    TODO :
-    Certain handlers use additional parameters, e.g. event notifications
-    require the event type as part of the request body. These parameters can
-    also get checked when specifying the target handler.
-    '''
-
-    def __init__(self,
-                 file_path=None, file_contents=None, file_types=None,
-                 line_num=None, column_num=None):
-        self.clear()
-        self.file_path = file_path
-        self.file_contents = file_contents
-        self.file_types = file_types
-        self.line_num = line_num
-        self.column_num = column_num
-
-    def clear(self):
-        ''' Deletes all stored parameters. '''
-        self._file_path = None
-        self._file_contents = None
-        self._file_types = None
-        self._line_num = None
-        self._column_num = None
-        self._extra_params = {}
-
-    def to_json(self):
-        file_path = self.file_path
-        file_contents = self.file_contents
-        file_types = self.file_types
-        line_num = self.line_num
-        column_num = self.column_num
-        extra_params = self._extra_params
-
-        # validate
-        if not file_path:
-            raise ValueError('no file path specified')
-        if not isinstance(file_path, str):
-            raise TypeError('file path must be a str: %r' % (file_path))
-
-        if not file_contents:
-            file_contents = ''
-        if not isinstance(file_contents, str):
-            raise TypeError(
-                'file contents must be a str: %r' % (file_contents)
-            )
-
-        if file_types is None:
-            file_types = []
-        if not isinstance(file_types, (tuple, list)):
-            raise TypeError('file types must be a list: %r' % (file_types))
-
-        if line_num is None:
-            line_num = 1
-        if not isinstance(line_num, int):
-            raise TypeError('line num must be an int: %r' % (line_num))
-
-        if column_num is None:
-            column_num = 1
-        if not isinstance(column_num, int):
-            raise TypeError('column num must be an int: %r' % (column_num))
-
-        if extra_params is None:
-            extra_params = {}
-        if not isinstance(extra_params, dict):
-            raise TypeError(
-                'extra parameters must be a dict: %r' % (extra_params)
-            )
-
-        json_params = {
-            'filepath': file_path,
-            'file_data': {
-                file_path: {
-                    'filetypes': file_types,
-                    'contents': file_contents,
-                },
-            },
-
-            'line_num': line_num,
-            'column_num': column_num,
-        }
-        json_params.update(extra_params)
-
-        return json_params
-
-    @property
-    def handler(self):
-        if not self._handler:
-            logger.warning('no handler set')
-            return ''
-        return self._handler
-
-    @handler.setter
-    def handler(self, handler):
-        if not isinstance(handler, str):
-            raise TypeError
-        self._handler = handler
-
-    @property
-    def file_path(self):
-        if not self._file_path:
-            logger.warning('no file path set')
-            return ''
-        return self._file_path
-
-    @file_path.setter
-    def file_path(self, file_path):
-        if not isinstance(file_path, str):
-            raise TypeError
-        self._file_path = file_path
-
-    @property
-    def file_contents(self):
-        if not self._file_contents:
-            logger.warning('no file contents set')
-            return ''
-        return self._file_contents
-
-    @file_contents.setter
-    def file_contents(self, file_contents):
-        if not isinstance(file_contents, str):
-            raise TypeError
-        self._file_contents = file_contents
-
-    @property
-    def file_types(self):
-        if not self._file_types:
-            logger.warning('no file types set')
-            return []
-        return self._file_types
-
-    @file_types.setter
-    def file_types(self, file_types):
-        if isinstance(file_types, str):
-            file_types = [file_types]
-        if not isinstance(file_types, (tuple, list)):
-            raise TypeError
-        # create a shallow copy
-        self._file_types = list(file_types)
-
-    @property
-    def line_num(self):
-        if not self._line_num:
-            logger.warning('no line number set')
-            return 1
-        return self._line_num
-
-    @line_num.setter
-    def line_num(self, line_num):
-        if not isinstance(line_num, int):
-            raise TypeError
-        if line_num <= 0:
-            raise ValueError
-        self._line_num = line_num
-
-    @property
-    def column_num(self):
-        if not self._column_num:
-            logger.warning('no column number set')
-            return 1
-        return self._column_num
-
-    @column_num.setter
-    def column_num(self, column_num):
-        if not isinstance(column_num, int):
-            raise TypeError
-        if column_num <= 0:
-            raise ValueError
-        self._column_num = column_num
-
-    def __getitem__(self, key):
-        ''' Retrieves `key` from the extra parameters. '''
-        if self._extra_params is None:
-            self._extra_params = {}
-        return self._extra_params[key]
-
-    def get(self, key, default=None):
-        '''
-        Retrieves `key` from the extra parameters. Returns `default` if unset.
-        '''
-        if self._extra_params is None:
-            self._extra_params = {}
-        return self._extra_params.get(key, default)
-
-    def __setitem__(self, key, value):
-        '''
-        Sets `key` in the extra parameters. These parameters have higher
-        priority than the file-based parameters, and may overwrite them if the
-        same key is used.
-        '''
-        if self._extra_params is None:
-            self._extra_params = {}
-        self._extra_params[key] = value
-
-    def __delitem__(self, key):
-        ''' Clears the `key` extra parameter. '''
-        if self._extra_params is None:
-            return
-        del self._extra_params[key]
-
-
-class SYcompletions(object):
-    '''
-    Wrapper around the JSON response received from ycmd completions.
+    Wrapper around the json response received from ycmd completions.
     Contains top-level metadata like where the completion was requested, and
     what prefix was matched by ycmd. This class also acts as a collection for
-    individual `SYcompletionOption` instances, which act as the possible
+    individual `CompletionOption` instances, which act as the possible
     choices for finishing the current identifier.
 
     This class behaves like a list. The completion options are ordered by ycmd,
@@ -270,9 +59,9 @@ class SYcompletions(object):
         )
 
 
-class SYcompletionOption(object):
+class CompletionOption(object):
     '''
-    Wrapper around individual JSON entries received from ycmd completions.
+    Wrapper around individual json entries received from ycmd completions.
     All completion options have metadata indicating what kind of symbol it is,
     and how they can be displayed. This base class is used to define the common
     attributes available in all completion options. Subclasses further include
@@ -349,7 +138,7 @@ class SYcompletionOption(object):
         }
         if self._file_types:
             repr_params['file_types'] = self._file_types
-        return '<SYcompletionOption %r>' % (repr_params)
+        return '<CompletionOption %r>' % (repr_params)
 
     def _has_file_type(self, file_type):
         if self._file_types is None:
@@ -364,7 +153,7 @@ class SYcompletionOption(object):
 def _parse_completion_option(node, file_types=None):
     '''
     Parses a single item in the completions list at `node` into an
-    `SYcompletionOption` instance.
+    `CompletionOption` instance.
     If `file_types` is provided, it should be a list of strings indicating the
     file types of the original source code. This will be used to post-process
     and normalize the ycmd descriptions depending on the syntax.
@@ -380,33 +169,33 @@ def _parse_completion_option(node, file_types=None):
     extra_data = node.get('extra_data', None)
     detailed_info = node.get('detailed_info', None)
 
-    return SYcompletionOption(
+    return CompletionOption(
         menu_info=menu_info, insertion_text=insertion_text,
         extra_data=extra_data, detailed_info=detailed_info,
         file_types=file_types,
     )
 
 
-def parse_completion_options(json, request_parameters=None):
+def parse_completions(json, request_parameters=None):
     '''
-    Parses a `json` response from ycmd into an `SYcompletions` instance.
-    This expects a certain format in the input JSON, or it won't be able to
+    Parses a `json` response from ycmd into an `Completions` instance.
+    This expects a certain format in the input json, or it won't be able to
     properly build the completion options.
     If `request_parameters` is provided, it should be an instance of
-    `SYrequestParameters`. It may be used to post-process the completion
-    options depending on the syntax of the file. For example, this will attempt
-    to normalize differences in the way ycmd displays functions.
+    `RequestParameters`. It may be used to post-process the completion options
+    depending on the syntax of the file. For example, this will attempt to
+    normalize differences in the way ycmd displays functions.
     '''
     assert isinstance(json, (str, bytes, dict)), \
         'json must be a dict: %r' % (json)
     assert request_parameters is None or \
-        isinstance(request_parameters, SYrequestParameters), \
-        'request parameters must be SYrequestParameters: %r' % \
+        isinstance(request_parameters, RequestParameters), \
+        'request parameters must be RequestParameters: %r' % \
         (request_parameters)
 
     if isinstance(json, (str, bytes)):
         logger.debug('parsing json string into a dict')
-        json = parse_json(json)
+        json = json_parse(json)
 
     if 'errors' not in json or not isinstance(json['errors'], list):
         raise TypeError('json is missing "errors" list')
@@ -440,7 +229,7 @@ def parse_completion_options(json, request_parameters=None):
     # just assume it's an int
     start_column = json_start_column
 
-    return SYcompletions(
+    return Completions(
         completion_options=completion_options, start_column=start_column,
     )
 

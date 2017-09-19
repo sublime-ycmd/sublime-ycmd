@@ -15,8 +15,8 @@ import unittest
 
 sys.path.append(os.path.dirname(__file__))  # noqa: E402
 
-import cli.args
-import lib.logutils
+from cli.args import base_cli_argparser
+from lib.util.log import get_smart_truncate_formatter
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -51,13 +51,9 @@ def configure_logging(log_level=None, output_stream=None):
 
     logger_stream = logging.StreamHandler(stream=output_stream)
     logger_stream.setLevel(log_level)
-    logger_formatter = logging.Formatter(
-        fmt=lib.logutils.get_extended_messagefmt(),
-        datefmt=lib.logutils.get_default_datefmt(),
-    )
+    logger_formatter = get_smart_truncate_formatter()
     logger_stream.setFormatter(logger_formatter)
     logger_instance.addHandler(logger_stream)
-    lib.logutils.register_extension_filters(logger_stream)
 
 
 def get_test_suite_items(test_suite):
@@ -89,7 +85,7 @@ def get_cli_argparser():
     Generates and returns an argparse.ArgumentParser instance for use with
     parsing test-related options.
     '''
-    parser = cli.args.base_cli_argparser(
+    parser = base_cli_argparser(
         description='sublime-ycmd unit test runner',
     )
 
@@ -106,7 +102,7 @@ def get_cli_argparser():
     return parser
 
 
-class SYtestRunnerLogStream(io.TextIOBase):
+class TestRunnerLogStream(io.TextIOBase):
     '''
     File stream wrapper class for use with TestRunner.
     Instances of this class will accept messages written by a test runner
@@ -115,7 +111,7 @@ class SYtestRunnerLogStream(io.TextIOBase):
     '''
 
     def __init__(self):
-        super(SYtestRunnerLogStream, self).__init__()
+        super(TestRunnerLogStream, self).__init__()
         self._buffer = ''
 
     def consume_line(self):
@@ -164,7 +160,7 @@ class SYtestRunnerLogStream(io.TextIOBase):
         for buffered_line in self._buffer.splitlines():
             self.testrunner_log(buffered_line)
 
-        super(SYtestRunnerLogStream, self).close()
+        super(TestRunnerLogStream, self).close()
 
 
 def main():
@@ -186,9 +182,10 @@ def main():
                 get_test_suite_items(test_suite))
     logger.debug('about to run tests')
 
-    test_runner_logstream = SYtestRunnerLogStream()
-    test_runner = unittest.TextTestRunner(stream=test_runner_logstream,
-                                          verbosity=2)
+    test_runner_logstream = TestRunnerLogStream()
+    test_runner = unittest.TextTestRunner(
+        stream=test_runner_logstream, verbosity=2,
+    )
     test_runner.run(test_suite)
 
 

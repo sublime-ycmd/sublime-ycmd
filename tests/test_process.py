@@ -8,8 +8,11 @@ import io
 import logging
 import unittest
 
-import lib.process
-import tests.utils
+from lib.process import (
+    FileHandles,
+    Process,
+)
+from tests.utils import logtest
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -19,8 +22,8 @@ def make_output_stream(process):
     Creates an in-memory output stream and binds the given process' stdout
     and stderr to it.
     '''
-    assert isinstance(process, lib.process.SYprocess), \
-        '[internal] process is not a SYprocess instance: %r' % process
+    assert isinstance(process, Process), \
+        '[internal] process is not a Process instance: %r' % process
 
     memstream = io.StringIO()
 
@@ -35,14 +38,14 @@ def set_process_output_pipes(process):
     Sets the stdout and stderr handles for the process to be a PIPE. This
     allows reading stdout and stderr from the process.
     '''
-    assert isinstance(process, lib.process.SYprocess), \
-        '[internal] process is not a SYprocess instance: %r' % process
+    assert isinstance(process, Process), \
+        '[internal] process is not a Process instance: %r' % process
 
     assert not process.alive(), \
         '[internal] process is running already, cannot redirect outputs'
 
-    process.filehandles.stdout = lib.process.SYfileHandles.PIPE
-    process.filehandles.stderr = lib.process.SYfileHandles.PIPE
+    process.filehandles.stdout = FileHandles.PIPE
+    process.filehandles.stderr = FileHandles.PIPE
 
 
 def poll_process_output(process):
@@ -51,8 +54,8 @@ def poll_process_output(process):
     This blocks until the process has either terminated, or has closed the
     output file descriptors.
     '''
-    assert isinstance(process, lib.process.SYprocess), \
-        '[internal] process is not a SYprocess instance: %r' % process
+    assert isinstance(process, Process), \
+        '[internal] process is not a Process instance: %r' % process
 
     if process.alive():
         logger.debug('process is still alive, this will likely block')
@@ -61,16 +64,16 @@ def poll_process_output(process):
     return process.communicate(None, 3)
 
 
-class SYTprocess(unittest.TestCase):
+class TestProcess(unittest.TestCase):
     '''
     Unit tests for the process class. This class should allow configuration
     and management of a generic process.
     '''
 
-    @tests.utils.logtest('process : echo')
-    def test_pr_echo(self):
+    @logtest('process : echo')
+    def test_process_echo(self):
         ''' Ensures that the process can launch a simple echo command. '''
-        echo_process = lib.process.SYprocess()
+        echo_process = Process()
         set_process_output_pipes(echo_process)
 
         echo_process.binary = 'echo'

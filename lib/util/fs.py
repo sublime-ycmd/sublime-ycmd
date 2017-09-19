@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-lib/fs.py
+lib/util/fs.py
 File-system utilities.
 '''
 
@@ -91,7 +91,7 @@ def save_json_file(fp, data, encoding='utf-8'):
     Serializes and writes out `data` to `fp`. The data should be provided as
     a `dict`, and will be serialized to a JSON string. The `fp` parameter
     should support a `write` method.
-    If `encoding` is `b''`, the serialized JSON will be written as `bytes`.
+    The `encoding` parameter is used when encoding the serialized data.
     '''
     json_str = json.dumps(data)
     json_bytes = json_str.encode(encoding=encoding)
@@ -335,17 +335,6 @@ def _commonpath_polyfill(paths):
     # first item always ends in a directory separator
     common_path_components[0] += os.sep
     return os.path.join(*common_path_components)
-
-    '''
-    commonprefix = os.path.commonprefix(paths)
-
-    if not commonprefix:
-        raise ValueError('Paths don\'t have a common ancestor')
-
-    head, tail = os.path.split(commonprefix)
-    # always drop `tail`, that ensures we end up with a valid prefix path
-    return head
-    '''
 
 
 def get_common_ancestor(paths, default=None):

@@ -1,0 +1,20 @@
+[run]
+branch = True
+source =
+    lib
+
+[paths]
+source =
+    lib/
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+
+omit =
+    */__init__.py
+    */tests/*
+
+ignore_errors = True

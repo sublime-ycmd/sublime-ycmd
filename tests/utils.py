@@ -54,8 +54,9 @@ def applytestfunction(testinstance, testfunction, testcases):
             try:
                 testfunction(*testcaseargs, **testcasekwargs)
             except Exception as exc:
-                exc_info = str(exc).splitlines()[0]
-                logger.debug('test case #%d resulted in an error: %s',
+                exc_lines = str(exc).splitlines()
+                exc_info = exc_lines[0] if exc_lines else exc
+                logger.debug('test case #%d resulted in an error: %r',
                              testcounter, exc_info)
                 raise
             else:

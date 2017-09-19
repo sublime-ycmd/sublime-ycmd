@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 
 '''
-lib/strutils.py
+lib/util/str.py
 Contains string utility functions. This includes conversions between `str` and
 `bytes`, and hash calculations.
 '''
 
-import base64
-import hashlib
-import hmac
-import json
 import logging
-import os
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 
 def str_to_bytes(data):
+    '''
+    Converts `data` to `bytes`.
+
+    If data is a `str`, it is encoded into `bytes`.
+    If data is `bytes`, it is returned as-is.
+    '''
     assert isinstance(data, (str, bytes)), \
         'data must be str or bytes: %r' % (data)
     if isinstance(data, bytes):
@@ -26,101 +27,18 @@ def str_to_bytes(data):
 
 
 def bytes_to_str(data):
+    '''
+    Converts `data` to `str`.
+
+    If data is a `bytes`, it is decoded into `str`.
+    If data is `str`, it is returned as-is.
+    '''
     assert isinstance(data, (str, bytes)), \
         'data must be str or bytes: %r' % (data)
     if isinstance(data, str):
         # already str, yay
         return data
     return data.decode()
-
-
-def base64_encode(data):
-    '''
-    Encodes the given `data` in base-64. The result will either be a `str`,
-    or `bytes`, depending on the input type (same as input type).
-    '''
-    assert isinstance(data, (str, bytes)), \
-        'data must be str or bytes: %r' % (data)
-
-    is_str = isinstance(data, str)
-    if is_str:
-        data = str_to_bytes(data)
-
-    encoded = base64.b64encode(data)
-
-    if is_str:
-        encoded = bytes_to_str(encoded)
-
-    return encoded
-
-
-def new_hmac_secret(num_bytes=32):
-    ''' Generates and returns an HMAC secret in binary encoding. '''
-    hmac_secret_binary = os.urandom(num_bytes)
-    return hmac_secret_binary
-
-
-def _calculate_hmac(hmac_secret, data, digestmod=hashlib.sha256):
-    assert isinstance(hmac_secret, (str, bytes)), \
-        'hmac secret must be str or bytes: %r' % (hmac_secret)
-    assert isinstance(data, (str, bytes)), \
-        'data must be str or bytes: %r' % (data)
-
-    hmac_secret = str_to_bytes(hmac_secret)
-    data = str_to_bytes(data)
-
-    hmac_instance = hmac.new(hmac_secret, msg=data, digestmod=digestmod)
-    hmac_digest_bytes = hmac_instance.digest()
-    assert isinstance(hmac_digest_bytes, bytes), \
-        '[internal] hmac digest should be bytes: %r' % (hmac_digest_bytes)
-
-    return hmac_digest_bytes
-
-
-def calculate_hmac(hmac_secret, *content, digestmod=hashlib.sha256):
-    '''
-    Calculates the HMAC for the given `content` using the `hmac_secret`.
-    This is calculated by first generating the HMAC for each item in
-    `content` separately, then concatenating them, and finally running another
-    HMAC on the concatenated intermediate result. Finally, the result of that
-    is base-64 encoded, so it is suitable for use in headers.
-    '''
-    assert isinstance(hmac_secret, (str, bytes)), \
-        'hmac secret must be str or bytes: %r' % (hmac_secret)
-    hmac_secret = str_to_bytes(hmac_secret)
-
-    content_hmac_digests = map(
-        lambda data: _calculate_hmac(
-            hmac_secret, data=data, digestmod=digestmod,
-        ), content,
-    )
-
-    concatenated_hmac_digests = b''.join(content_hmac_digests)
-
-    hmac_digest_binary = _calculate_hmac(
-        hmac_secret, data=concatenated_hmac_digests, digestmod=digestmod,
-    )
-
-    hmac_digest_bytes = base64_encode(hmac_digest_binary)
-    hmac_digest_str = bytes_to_str(hmac_digest_bytes)
-
-    return hmac_digest_str
-
-
-def format_json(data):
-    assert isinstance(data, dict), 'data must be a dict: %r' % (data)
-    serialized = json.dumps(data)
-    return serialized
-
-
-def parse_json(data):
-    assert isinstance(data, (str, bytes)), \
-        'data must be str or bytes: %r' % (data)
-    if isinstance(data, bytes):
-        data = bytes_to_str(data)
-
-    parsed = json.loads(data)
-    return parsed
 
 
 def truncate(data, max_sz=16):
