@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 '''
-tests/test_logutils.py
-Unit tests for the log utils module.
+lib/util/log.py
+Tests for logging utility functions.
 '''
 
 import logging
@@ -12,10 +13,8 @@ from lib.util.log import (
     FormatField,
     parse_fields,
 )
-from tests.utils import (
-    applytestfunction,
-    logtest,
-)
+from tests.lib.decorator import log_function
+from tests.lib.subtest import map_test_function
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -47,7 +46,7 @@ class TestFieldIterator(unittest.TestCase):
     information about each field in a format string.
     '''
 
-    @logtest('log-format field iterator : simple percent')
+    @log_function('[percent : simple]')
     def test_fi_simple_percent(self):
         ''' Ensures that single-item `%`-format fields are parsed. '''
 
@@ -56,17 +55,12 @@ class TestFieldIterator(unittest.TestCase):
             ('% 5ld', make_format_field(space=' ', width='5', type='ld')),
             ('%-2s', make_format_field(minus='-', width='2', type='s')),
         ]
-        single_field_args = [
-            (f, {}) for f in single_fields
-        ]
 
         def test_lffi_single_percent(field, expected):
             result = next(parse_fields(field))
             self.assertEqual(expected, result)
 
-        applytestfunction(
-            self, test_lffi_single_percent, single_field_args,
-        )
+        map_test_function(self, test_lffi_single_percent, single_fields)
 
 
 class TestTruncateFormatter(unittest.TestCase):
@@ -75,7 +69,7 @@ class TestTruncateFormatter(unittest.TestCase):
     to truncate fields that are longer than the target field width.
     '''
 
-    @logtest('log smart-truncate formatter : simple fields')
+    @log_function('[smart-truncate : simple]')
     def test_tf_simple_percent_fields(self):
         ''' Ensures that simple %-style field widths are handled. '''
 
@@ -89,4 +83,5 @@ class TestTruncateFormatter(unittest.TestCase):
         formatted = formatter.format(record)
 
         expected = ' hll world   '
+        logger.debug('expected, truncated: %r, %r', expected, formatted)
         self.assertEqual(expected, formatted)

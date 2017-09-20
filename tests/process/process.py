@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 '''
-tests/test_process.py
-Unit tests for the process module.
+lib/process/process.py
+Tests for the process class.
 '''
 
 import io
@@ -12,7 +13,7 @@ from lib.process import (
     FileHandles,
     Process,
 )
-from tests.utils import logtest
+from tests.lib.decorator import log_function
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -70,7 +71,7 @@ class TestProcess(unittest.TestCase):
     and management of a generic process.
     '''
 
-    @logtest('process : echo')
+    @log_function('[process : echo]')
     def test_process_echo(self):
         ''' Ensures that the process can launch a simple echo command. '''
         echo_process = Process()

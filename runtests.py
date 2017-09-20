@@ -176,7 +176,10 @@ def main():
     configure_logging(cli_args.log_level, cli_args.log_file)
 
     logger.debug('initialized logger, about to load tests')
-    test_suite = unittest.defaultTestLoader.discover('tests')
+    project_dir = os.path.dirname(__file__)
+    test_suite = unittest.defaultTestLoader.discover(
+        'tests', pattern='*.py', top_level_dir=project_dir,
+    )
 
     logger.info('loaded %d tests: %s', test_suite.countTestCases(),
                 get_test_suite_items(test_suite))

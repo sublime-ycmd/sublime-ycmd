@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+
 '''
-tests/test_fs.py
-Unit tests for the filesystem utilities module.
+lib/util/fs.py
+Tests for file-system utility functions.
 '''
 
 import logging
@@ -9,10 +10,8 @@ import os
 import unittest
 
 from lib.util.fs import get_common_ancestor
-from tests.utils import (
-    applytestfunction,
-    logtest,
-)
+from tests.lib.decorator import log_function
+from tests.lib.subtest import map_test_function
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -31,14 +30,14 @@ class TestGetCommonAncestor(unittest.TestCase):
     ancestor should represent the path to a common file node between all the
     input paths.
     '''
-    @logtest('get common ancestor : empty')
+    @log_function('[ancestor : empty]')
     def test_gca_empty(self):
         ''' Ensures that `None` is returned for an empty path list. '''
         result = get_common_ancestor([])
         self.assertEqual(None, result,
                          'common ancestor of empty paths should be None')
 
-    @logtest('get common ancestor : single')
+    @log_function('[ancestor : single]')
     def test_gca_single(self):
         ''' Ensures that a single path always results in that same path. '''
         single_paths = [
@@ -60,11 +59,11 @@ class TestGetCommonAncestor(unittest.TestCase):
             result = get_common_ancestor([path])
             self.assertEqual(path, result)
 
-        applytestfunction(
+        map_test_function(
             self, test_gca_single_one, single_path_args,
         )
 
-    @logtest('get common ancestor : mostly similar')
+    @log_function('[ancestor : similar]')
     def test_gca_mostly_similar(self):
         '''
         Ensures that the common path can be found for many paths, with a long
@@ -94,6 +93,6 @@ class TestGetCommonAncestor(unittest.TestCase):
             result = get_common_ancestor(paths)
             self.assertEqual(expected, result)
 
-        applytestfunction(
+        map_test_function(
             self, test_gca_mostly_similar_one, mostly_similar_path_args,
         )

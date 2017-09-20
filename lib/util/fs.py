@@ -342,7 +342,10 @@ def get_common_ancestor(paths, default=None):
     try:
         # common_path = os.path.commonpath(paths)
         common_path = _commonpath_polyfill(paths)
-    except ValueError:
-        logger.warning('invalid paths, cannot get common ancenstor: %s', paths)
+    except ValueError as e:
+        logger.debug(
+            'invalid paths, cannot get common ancenstor: %s, %r',
+            paths, e,
+        )
 
     return common_path

@@ -54,7 +54,7 @@ def base_cli_argparser(**kwargs):
     '''
     parser = argparse.ArgumentParser(**kwargs)
 
-    class SYparseLogLevelAction(argparse.Action):   \
+    class ParseLogLevelAction(argparse.Action):   \
             # pylint: disable=too-few-public-methods
         '''
         Helper that can be used as an argparse action. Parses a given log level
@@ -93,12 +93,14 @@ def base_cli_argparser(**kwargs):
             setattr(namespace, self.dest, enum_from_str)
 
     logging_group = parser.add_argument_group(title='logging')
-    logging_group\
-        .add_argument('-d', '--log-level', nargs=1,
-                      action=SYparseLogLevelAction,
-                      help='enables log messages of a minimum severity level')
-    logging_group\
-        .add_argument('-f', '--log-file', type=argparse.FileType('w'),
-                      help='writes log output to specified file')
+    logging_group.add_argument(
+        '-d', '--log-level',
+        nargs=1, action=ParseLogLevelAction,
+        help='enables log messages of a minimum severity level')
+    logging_group.add_argument(
+        '-f', '--log-file',
+        type=argparse.FileType('w'),
+        help='writes log output to specified file'
+    )
 
     return parser
