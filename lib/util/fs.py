@@ -79,8 +79,8 @@ def load_json_file(path, encoding='utf-8'):
     logger.debug(
         'attempting to parse file with path, encoding: %s, %s', path, encoding,
     )
-    with open(path, encoding=encoding) as f:
-        file_data = json.load(f)
+    with open(path, encoding=encoding) as file_handle:
+        file_data = json.load(file_handle)
 
     logger.debug('successfully parsed json file')
     return file_data
@@ -315,7 +315,7 @@ def _commonpath_polyfill(paths):
             break
         one_component = current_components[0]
         all_equal = all(map(
-            lambda c: c == one_component, current_components
+            lambda c, e=one_component: c == e, current_components
         ))
 
         if not all_equal:

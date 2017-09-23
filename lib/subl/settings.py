@@ -23,6 +23,7 @@ from lib.subl.constants import (
     SUBLIME_SETTINGS_WATCHED_KEYS,
     SUBLIME_SETTINGS_YCMD_SERVER_KEYS,
 )
+from lib.util.dict import merge_dicts
 from lib.util.fs import (
     resolve_binary_path,
     default_python_binary_path,
@@ -43,6 +44,9 @@ class Settings(object):
         self._ycmd_python_binary_path = None
         self._ycmd_language_whitelist = None
         self._ycmd_language_blacklist = None
+
+        self._sublime_ycmd_logging_dictconfig_overrides = {}
+        self._sublime_ycmd_logging_dictconfig_base = {}
 
         if settings is not None:
             self.parse(settings)
@@ -66,6 +70,11 @@ class Settings(object):
             settings.get('ycmd_language_whitelist', None)
         self._ycmd_language_blacklist = \
             settings.get('ycmd_language_blacklist', None)
+
+        self._sublime_ycmd_logging_dictconfig_overrides = \
+            settings.get('sublime_ycmd_logging_dictconfig_overrides', {})
+        self._sublime_ycmd_logging_dictconfig_base = \
+            settings.get('sublime_ycmd_logging_dictconfig_base', {})
 
         self._normalize()
 
@@ -157,15 +166,34 @@ class Settings(object):
         '''
         return self._ycmd_language_blacklist
 
-    def as_dict(self):
-        logger.warning('deprecated: call dict() on Settings directly')
-        return {
-            'ycmd_root_directory': self.ycmd_root_directory,
-            'ycmd_default_settings_path': self.ycmd_default_settings_path,
-            'ycmd_python_binary_path': self.ycmd_python_binary_path,
-            'ycmd_language_whitelist': self.ycmd_language_whitelist,
-            'ycmd_language_blacklist': self.ycmd_language_blacklist,
-        }
+    @property
+    def sublime_ycmd_logging_dictconfig_base(self):
+        '''
+        Returns the base logging dictionary configuration for the library.
+        This will be a dictionary, but may be empty.
+        '''
+        return self._sublime_ycmd_logging_dictconfig_base.copy()
+
+    @property
+    def sublime_ycmd_logging_dictconfig_overrides(self):
+        '''
+        Returns the override logging dictionary configuration for the library.
+        This will be a dictionary, but may be empty.
+        '''
+        return self._sublime_ycmd_logging_dictconfig_overrides.copy()
+
+    @property
+    def sublime_ycmd_logging_dictconfig(self):
+        '''
+        Resolves the base and override logging dictionary configuration into
+        a complete configuration for the library.
+        This will be a dictionary, valid for `logging.config.dictConfig`.
+        '''
+        return merge_dicts(
+            {},
+            self.sublime_ycmd_logging_dictconfig_base,
+            self.sublime_ycmd_logging_dictconfig_overrides,
+        )
 
     def __eq__(self, other):
         '''
@@ -187,7 +215,7 @@ class Settings(object):
         return True
 
     def __bool__(self):
-        return not not self._ycmd_root_directory
+        return bool(self._ycmd_root_directory)
 
     def __hash__(self):
         return hash((
@@ -204,6 +232,14 @@ class Settings(object):
             ('ycmd_python_binary_path', self.ycmd_python_binary_path),
             ('ycmd_language_whitelist', self.ycmd_language_whitelist),
             ('ycmd_language_blacklist', self.ycmd_language_blacklist),
+            (
+                'sublime_ycmd_logging_dictconfig_base',
+                self.sublime_ycmd_logging_dictconfig_base,
+            ),
+            (
+                'sublime_ycmd_logging_dictconfig_overrides',
+                self.sublime_ycmd_logging_dictconfig_overrides,
+            ),
         ])
 
     def __str__(self):
@@ -233,17 +269,21 @@ def load_settings(filename=SUBLIME_SETTINGS_FILENAME):
 
 def bind_on_change_settings(callback,
                             filename=SUBLIME_SETTINGS_FILENAME,
-                            setting_keys=SUBLIME_SETTINGS_WATCHED_KEYS):
+                            setting_keys=None):
     '''
     Binds `callback` to the on-change-settings event. The settings are loaded
     from `filename`, which should be the base name of the file (i.e. not the
     path to it). When loading, the settings are parsed into a `Settings`
     instance, and this instance is supplied as an argument to the callback.
+    If `setting_keys` is not provided, `SUBLIME_SETTINGS_WATCHED_KEYS` is used.
     The keys in `setting_keys` are used to bind an event listener. Changes to
     settings that use these keys will trigger a reload.
     When called, this will automatically load the settings for the first time,
     and immediately invoke `callback` with the initial settings.
     '''
+    if setting_keys is None:
+        setting_keys = SUBLIME_SETTINGS_WATCHED_KEYS[:]
+
     logger.debug('loading settings from: %s', filename)
     settings = sublime.load_settings(filename)
 

@@ -7,6 +7,7 @@ requests to it.
 '''
 
 import logging
+import logging.config
 import os
 import sys
 
@@ -48,50 +49,20 @@ finally:
     assert isinstance(_HAS_LOADED_ST, bool)
 
 
-def configure_logging(log_level=None, output_stream=None):
+def configure_logging(dict_config, logger=None):
     '''
-    Configures the logging module (or plugin-specific root logger) to log at
-    the given `log_level` on stream `output_stream`. Formatters, handlers, and
-    filters are added to prettify the logging output.
-    If `log_level` is not provided, it defaults to `logging.WARNING`.
-    If `output_stream` is not provided, it defaults to `sys.stdout`.
-    When running under sublime, only the plugin's logger is reconfigured, so
-    it won't affect any other plugin. When running in debug mode, the root
-    logger is reconfigured, to make it easier to use.
-    NOTE : It is safe to call this method multiple times. The logger will be
-           reconfigured by removing existing handlers and re-registering them.
+    Configures the logging module (or plugin-specific root logger) to log with
+    the configuration in the given `dict_config`.
+    The dictionary configuration must be compatible with `logging.config`.
     '''
-    if log_level is None:
-        log_level = logging.WARNING
-    if output_stream is None:
-        output_stream = sys.stdout
+    # pylint: disable=redefined-outer-name
 
-    # avoid messing with the root logger
-    # if running under sublime, that would affect all other plugins as well
-    logger_instance = logging.getLogger('sublime-ycmd')
+    if logger is None:
+        logger = logging.getLogger('sublime-ycmd')
+    if not isinstance(logger, logging.Logger):
+        raise TypeError('logger should be a Logger: %r' % (logger))
 
-    logger.debug('disabling propagate, and setting level')
-    # disable propagate so logging does not go above this module
-    logger_instance.propagate = False
-
-    # enable all log levels on the top-level logger
-    # the handler/filter will decide what to reject
-    logger_instance.setLevel(logging.DEBUG)
-
-    if logger_instance.hasHandlers():
-        logger_handlers_old = [h for h in logger_instance.handlers]
-        for logger_handler in logger_handlers_old:
-            logger_instance.removeHandler(logger_handler)
-
-    # Don't log after here! Extension filters not set up yet
-    logger_stream = logging.StreamHandler(stream=output_stream)
-    logger_stream.setLevel(log_level)
-    logger_formatter = get_smart_truncate_formatter()
-    logger_stream.setFormatter(logger_formatter)
-    logger_instance.addHandler(logger_stream)
-    # Safe to log again
-
-    logger.debug('successfully configured logging')
+    logging.config.dictConfig(dict_config)
 
 
 class SublimeYcmdServerManager(object):
@@ -197,7 +168,7 @@ class SublimeYcmdServerManager(object):
             server = start_ycmd_server(
                 self._ycmd_root_directory,
                 ycmd_settings_path=self._ycmd_default_settings_path,
-                ycmd_python_binary_path=self._ycmd_python_binary_path,
+                python_binary_path=self._ycmd_python_binary_path,
                 working_directory=view_working_dir,
             )
             self._servers.append(server)
@@ -523,13 +494,17 @@ class SublimeYcmdState(object):
             logger.debug('new settings require ycmd server restart, resetting')
             self.reset()
 
-        logger.debug('successfully configured with settings: %s', settings)
-        self._settings = settings
         self._server_manager.reset(
             ycmd_root_directory=settings.ycmd_root_directory,
             ycmd_default_settings_path=settings.ycmd_default_settings_path,
             ycmd_python_binary_path=settings.ycmd_python_binary_path,
         )
+        logging_dictconfig = settings.sublime_ycmd_logging_dictconfig
+        if logging_dictconfig:
+            configure_logging(logging_dictconfig)
+
+        logger.debug('successfully configured with settings: %s', settings)
+        self._settings = settings
 
     def activate_view(self, view):
         '''
@@ -1107,10 +1082,40 @@ def on_change_settings(settings):
         state.configure(settings)
 
 
+DEBUG_LOGGING_DICT_CONFIG = {
+    'version': 1,
+    'filters': {
+        '': {
+            'level': 'DEBUG',
+        }
+    },
+    'handlers': {
+        'default': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'default',
+            'level': 'DEBUG',
+            'stream': 'ext://sys.stderr',
+        }
+    },
+    'formatters': {
+        'default': {
+            '()': 'lib.util.log.get_smart_truncate_formatter',
+        }
+    },
+    'loggers': {
+        'sublime-ycmd': {
+            'level': 'DEBUG',
+            'handlers': ['default'],
+            'propagate': False,
+        }
+    }
+}
+
+
 def plugin_loaded():
     ''' Callback, triggered when the plugin is loaded. '''
     logger.info('initializing sublime-ycmd')
-    configure_logging(logging.DEBUG)
+    configure_logging(DEBUG_LOGGING_DICT_CONFIG)
     _reset_plugin_state()
     logger.info('starting sublime-ycmd')
     bind_on_change_settings(on_change_settings)
@@ -1123,13 +1128,55 @@ def plugin_unloaded():
     logging.info('stopped sublime-ycmd')
 
 
+def _configure_logging(log_level=None, output_stream=None):
+    '''
+    Configures the logging module (or plugin-specific root logger) to log at
+    the given `log_level` on stream `output_stream`. Formatters, handlers, and
+    filters are added to prettify the logging output.
+    If `log_level` is not provided, it defaults to `logging.WARNING`.
+    If `output_stream` is not provided, it defaults to `sys.stdout`.
+    This is only meant for debugging. Not for use in the actual plugin logic.
+    '''
+    if log_level is None:
+        log_level = logging.WARNING
+    if output_stream is None:
+        output_stream = sys.stdout
+
+    # avoid messing with the root logger
+    # if running under sublime, that would affect all other plugins as well
+    logger_instance = logging.getLogger('sublime-ycmd')
+
+    logger.debug('disabling propagate, and setting level')
+    # disable propagate so logging does not go above this module
+    logger_instance.propagate = False
+
+    # enable all log levels on the top-level logger
+    # the handler/filter will decide what to reject
+    logger_instance.setLevel(logging.DEBUG)
+
+    if logger_instance.hasHandlers():
+        logger_handlers_old = [h for h in logger_instance.handlers]
+        for logger_handler in logger_handlers_old:
+            logger_instance.removeHandler(logger_handler)
+
+    # Don't log after here! Extension filters not set up yet
+    logger_stream = logging.StreamHandler(stream=output_stream)
+    logger_stream.setLevel(log_level)
+    logger_formatter = get_smart_truncate_formatter()
+    logger_stream.setFormatter(logger_formatter)
+    logger_instance.addHandler(logger_stream)
+    # Safe to log again
+
+    logger.debug('successfully configured logging')
+
+
 def main():
     ''' Main function. Executed when this script is executed directly. '''
     cli_argparser = base_cli_argparser(
         description='sublime-ycmd plugin loader',
     )
     cli_args = cli_argparser.parse_args()
-    configure_logging(cli_args.log_level, cli_args.log_file)
+    _configure_logging(cli_args.log_level, cli_args.log_file)
 
     logger.info('starting main function')
 

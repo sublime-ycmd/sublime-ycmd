@@ -10,6 +10,8 @@ logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 
 class LoggingContextFilter(logging.Filter):
+    ''' Specialized log filter for adding a prefix to log records. '''
+
     def __init__(self, name='', prefix=None):
         super(LoggingContextFilter, self).__init__(name=name)
         self._prefix = prefix if prefix is not None else ''
@@ -44,7 +46,12 @@ class LoggingContextFilter(logging.Filter):
 
 
 class LoggingContext(object):
+    '''
+    Specialized logging context manager for adding context to log records.
+    '''
+
     def __init__(self, logger, desc=None):
+        # pylint: disable=redefined-outer-name
         self._logger = logger
         self._handler = None
         self._filter = None
@@ -109,8 +116,10 @@ def log_function(desc=None, logger=None,
     the function.
     '''
 
+    # pylint: disable=redefined-outer-name
     if desc:
         def get_desc(fn):
+            # pylint: disable=unused-argument
             return desc
     else:
         def get_desc(fn):

@@ -19,7 +19,10 @@ except ImportError:
     from lib.subl.dummy import sublime
 
 from lib.schema.request import RequestParameters
-from lib.subl.constants import SUBLIME_DEFAULT_LANGUAGE_SCOPE_MAPPING
+from lib.subl.constants import (
+    SUBLIME_DEFAULT_LANGUAGE_SCOPE_MAPPING,
+    SUBLIME_LANGUAGE_SCOPE_PREFIX,
+)
 from lib.util.fs import (
     get_common_ancestor,
     get_directory_name,
@@ -40,6 +43,7 @@ class View(object):
 
     def __init__(self, view=None):
         self._view = view   # type: sublime.View
+        self._cache = None
         self._recalculate()
 
     def _recalculate(self):
@@ -256,7 +260,8 @@ class View(object):
         if isinstance(other, sublime.View):
             other_id = other.id()
         elif isinstance(other, View):
-            other_id = other._view.id()
+            other_view = other.view
+            other_id = other_view.id() if other_view else None
         else:
             raise TypeError('view must be a View: %r' % (other))
 
@@ -525,13 +530,12 @@ def get_file_types(view, scope_position=0):
 
     scope_names = view.scope_name(scope_position).split()   # type: list
 
-    SOURCE_PREFIX = 'source.'
     source_scope_names = list(filter(
-        lambda s: s.startswith(SOURCE_PREFIX), scope_names
+        lambda s: s.startswith(SUBLIME_LANGUAGE_SCOPE_PREFIX), scope_names
     ))
 
     source_names = list(map(
-        lambda s: s[len(SOURCE_PREFIX):], source_scope_names
+        lambda s: s[len(SUBLIME_LANGUAGE_SCOPE_PREFIX):], source_scope_names
     ))
 
     # TODO : Use `Settings` to get the scope mapping dynamically.

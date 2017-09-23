@@ -32,12 +32,19 @@ class RequestParameters(object):
 
     def __init__(self, file_path=None, file_contents=None, file_types=None,
                  line_num=None, column_num=None):
+        # pylint wants attributes in here, so copy-paste self.reset():
+        self._file_path = None
+        self._file_contents = None
+        self._file_types = None
+        self._line_num = None
+        self._column_num = None
+        self._extra_params = {}
+
         self.file_path = file_path
         self.file_contents = file_contents
         self.file_types = file_types
         self.line_num = line_num
         self.column_num = column_num
-        self._extra_params = {}
 
     def reset(self):
         ''' Deletes all stored parameters. '''
@@ -49,6 +56,12 @@ class RequestParameters(object):
         self._extra_params = {}
 
     def to_json(self):
+        '''
+        Generates and returns a `dict` representing all stored parameters, for
+        use in sending the request.
+        This will additionally validate all parameters, and generate defaults
+        for any missing ones.
+        '''
         file_path = self.file_path
         file_contents = self.file_contents
         file_types = self.file_types
@@ -106,19 +119,6 @@ class RequestParameters(object):
         json_params.update(extra_params)
 
         return json_params
-
-    @property
-    def handler(self):
-        if not self._handler:
-            logger.warning('no handler set')
-            return ''
-        return self._handler
-
-    @handler.setter
-    def handler(self, handler):
-        if not isinstance(handler, str):
-            raise TypeError
-        self._handler = handler
 
     @property
     def file_path(self):

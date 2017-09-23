@@ -45,7 +45,7 @@ from lib.ycmd.constants import (
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 # special logger instance for use in the server class
 # this logger uses a filter to add server information to all log statements
-server_logger = logging.getLogger('sublime-ycmd.' + __name__ + '.server')
+_server_logger = logging.getLogger('sublime-ycmd.' + __name__ + '.server')
 
 
 class Server(object):
@@ -343,7 +343,7 @@ class Server(object):
         self._label = label
 
     def _reset_logger(self):
-        self._logger = ServerLoggerAdapter(server_logger, {
+        self._logger = ServerLoggerAdapter(_server_logger, {
             'hostname': self._hostname or '?',
             'port': self._port or '?',
         })
@@ -366,6 +366,7 @@ class Server(object):
 
 class ServerLoggerAdapter(logging.LoggerAdapter):
     def __init__(self, logger, extra=None):
+        # pylint: disable=redefined-outer-name
         super(ServerLoggerAdapter, self).__init__(logger, extra or {})
 
     def process(self, msg, kwargs):

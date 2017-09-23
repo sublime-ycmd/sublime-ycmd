@@ -93,8 +93,9 @@ class CompletionOption(object):
 
         # else, try to get a syntax-specific description
 
-        # TODO : Make this deterministic. Currently, this uses a `dict` to
-        #        iterate through the handlers, which has arbitrary order.
+        # TODO : Derministic language-based shortdesc.
+        #        Currently, this uses a `dict` to iterate through the handlers,
+        #        which has arbitrary order.
         shortdesc_handlers = {
             'python': _shortdesc_python,
             'javascript': _shortdesc_javascript,
@@ -126,7 +127,7 @@ class CompletionOption(object):
         return self._insertion_text
 
     def __bool__(self):
-        return not not self._insertion_text
+        return bool(self._insertion_text)
 
     def __str__(self):
         return self._insertion_text or '?'
@@ -241,7 +242,7 @@ Syntax-specific utilities.
     ycmd server's menu description of it. The format of this menu description
     is not consistent across languages, hence these specialized helpers.
     If the helper does not understand the menu info, it should return `None`.
-'''
+'''     # pylint: disable=pointless-string-statement
 
 
 SHORTDESC_UNKNOWN = '?'
@@ -251,6 +252,7 @@ SHORTDESC_VARIABLE = 'var'
 SHORTDESC_FUNCTION = 'fn'
 SHORTDESC_DEFINITION = 'defn'
 SHORTDESC_ATTRIBUTE = 'attr'
+SHORTDESC_MODULE = 'mod'
 
 SHORTDESC_TYPE_CLASS = 'class'
 SHORTDESC_TYPE_STRING = 'str'
@@ -291,6 +293,9 @@ def _shortdesc_python(menu_info):
 
     if menu_info.startswith('def'):
         return SHORTDESC_FUNCTION
+
+    if menu_info.startswith('module'):
+        return SHORTDESC_MODULE
 
     if menu_info.startswith('class'):
         return SHORTDESC_TYPE_CLASS

@@ -27,5 +27,55 @@
   // the plugin will ignore completion requests for these languages (based on
   // the scope, see Tools -> Developer -> Show Scope Name)
   // entries in the blacklist have higher priority than those in the whitelist
-  "ycmd_language_blacklist": []
+  "ycmd_language_blacklist": [],
+
+  // plugin-specific settings
+
+  // logging configuration
+  // the user-configurable settings here are merged into the default dictionary
+  // configuration below to generate the final logging dictionary configuration
+  //
+  // just include the portions to override/add to, e.g.:
+  //  "sublime_ycmd_logging_dictconfig_overrides": {
+  //    "filters": { "": { "level": "DEBUG" } }
+  //  }
+  "sublime_ycmd_logging_dictconfig_overrides": {},
+
+  // these are the base/default settings for logging
+  // do not override this, use "sublime_ycmd_logging_dictconfig_overrides"
+  "sublime_ycmd_logging_dictconfig_base": {
+    "version": 1,
+    "filters": {
+      // default filter - enables warnings, errors and critical messages
+      "": {
+        "level": "WARNING",
+      }
+    },
+    "handlers": {
+      // default handler - streams to stderr
+      "default": {
+        "class": "logging.StreamHandler",
+        "formatter": "default",
+        "level": "DEBUG",
+        "stream": "ext://sys.stderr",
+      }
+    },
+    "formatters": {
+      // default formatter - truncates long module and function names
+      "default": {
+        "()": "lib.util.log.get_smart_truncate_formatter",
+        // "fmt": "whatever format here",
+        // "datefmt": "whatever date/timestamp format here",
+        // "props": {"fieldname": maxlen, ...}
+      }
+    },
+    "loggers": {
+      // all loggers are namespaced in "sublime-ycmd", so this is the root:
+      "sublime-ycmd": {
+        "level": "DEBUG",
+        "handlers": ["default"],
+        "propagate": false,
+      }
+    }
+  },
 }

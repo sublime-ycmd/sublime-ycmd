@@ -18,7 +18,7 @@ https://github.com/Valloric/ycmd/blob/master/ycmd/handlers.py
 HMAC header information.
 
 Not user configurable (likely won't change).
-'''
+'''     # pylint: disable=pointless-string-statement
 YCMD_HMAC_HEADER = 'X-Ycm-Hmac'
 YCMD_HMAC_SECRET_LENGTH = 16
 

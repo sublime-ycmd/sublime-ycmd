@@ -33,10 +33,10 @@ def make_log_record(msg='', **kwargs):
 
 
 def make_format_field(name=None, zero=None, minus=None, space=None,
-                      plus=None, width=None, point=None, type=None):
+                      plus=None, width=None, point=None, conv=None):
     return FormatField(
         name=name, zero=zero, minus=minus, space=space,
-        plus=plus, width=width, point=point, type=type,
+        plus=plus, width=width, point=point, conv=conv,
     )
 
 
@@ -51,9 +51,15 @@ class TestFieldIterator(unittest.TestCase):
         ''' Ensures that single-item `%`-format fields are parsed. '''
 
         single_fields = [
-            ('%(foo)15s', make_format_field(name='foo', width='15', type='s')),
-            ('% 5ld', make_format_field(space=' ', width='5', type='ld')),
-            ('%-2s', make_format_field(minus='-', width='2', type='s')),
+            ('%(foo)15s', make_format_field(
+                name='foo', width='15', conv='s'
+            )),
+            ('% 5ld', make_format_field(
+                space=' ', width='5', conv='ld'
+            )),
+            ('%-2s', make_format_field(
+                minus='-', width='2', conv='s'
+            )),
         ]
 
         def test_lffi_single_percent(field, expected):

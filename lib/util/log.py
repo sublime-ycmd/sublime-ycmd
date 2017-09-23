@@ -12,12 +12,13 @@ import os
 import re
 
 
-# XXX : ST provides module sources from 'python3.3.zip'
+# NOTE : ST provides module sources from 'python3.3.zip'
 #  e.g.     '/opt/st/python3.3.zip/logging/__init.pyo'
 #       However while running, `sys._getframe` inspects the actual source file:
 #           './python3.3/logging/__init__.py'
 #       Fix it up!
 try:
+    # pylint: disable=unused-import
     import sublime          # noqa
     import sublime_plugin   # noqa
 
@@ -25,39 +26,38 @@ try:
     # logging._srcfile = os.path.normcase(addLevelName.__code__.co_filename)
 
     if hasattr(logging, '_srcfile') and logging._srcfile:
-        python_zip_re = \
-            re.compile(
-                r'(?P<version>python(\w+)?(\.\w+)*)\.zip'
-                r'(?P<path>[/\\].*$)'
-            )
-        python_zip_match = python_zip_re.search(logging._srcfile)
-        if python_zip_match:
-            python_version = python_zip_match.group('version')
-            python_relative_file_path = python_zip_match.group('path')
+        _python_zip_re = re.compile(
+            r'(?P<version>python(\w+)?(\.\w+)*)\.zip'
+            r'(?P<path>[/\\].*$)'
+        )
+        _python_zip_match = _python_zip_re.search(logging._srcfile)
+        if _python_zip_match:
+            _python_version = _python_zip_match.group('version')
+            _python_relative_file_path = _python_zip_match.group('path')
 
             # fix it fix it fix it
             if os.sep == '\\':
-                python_relative_posix_path = \
-                    python_relative_file_path.replace(os.sep, '/')
+                _python_relative_posix_path = \
+                    _python_relative_file_path.replace(os.sep, '/')
             else:
-                python_relative_posix_path = python_relative_file_path[:]
+                _python_relative_posix_path = _python_relative_file_path[:]
 
-            srcfile_relative_posix_path = \
-                re.sub(r'\.py[oc]$', '.py', python_relative_posix_path)
+            _srcfile_relative_posix_path = \
+                re.sub(r'\.py[oc]$', '.py', _python_relative_posix_path)
 
-            srcfile_posix_path = './%s%s' % (
-                python_version, srcfile_relative_posix_path,
+            _srcfile_posix_path = './%s%s' % (
+                _python_version, _srcfile_relative_posix_path,
             )
 
-            srcfile_normalized_path = os.path.normcase(srcfile_posix_path)
+            _srcfile_normalized_path = os.path.normcase(_srcfile_posix_path)
 
             # if this doesn't calculate the right value, uncomment to debug:
             # print(
             #     'fixing logging srcfile: %s -> %s' %
-            #     (logging._srcfile, srcfile_normalized_path)
+            #     (logging._srcfile, _srcfile_normalized_path)
             # )
 
-            logging._srcfile = srcfile_normalized_path
+            logging._srcfile = _srcfile_normalized_path
 except ImportError:
     # all good... phew
     pass
@@ -304,6 +304,10 @@ class SmartTruncateFormatter(logging.Formatter):
 
     def format(self, record):
         def format_record_entry(name, length):
+            '''
+            Formats the entry for `name` by truncating it to a maximum of
+            `length` characters. Updates the `record` in place.
+            '''
             if not isinstance(name, str):
                 if self._debug:
                     logger.error('invalid formattable field: %r', name)
@@ -381,7 +385,7 @@ FormatField = collections.namedtuple('FormatField', [
     'plus',
     'width',
     'point',
-    'type',
+    'conv',
 ])
 
 
@@ -424,7 +428,7 @@ def parse_fields(fmt, style='%', default=None):
             r'(?P<plus>\+)?',
             r'(?P<width>\d+)?',
             r'(?P<point>(?:\.\d+))?',
-            r'(?P<type>[hlL]*[srxXeEfFdiou])',
+            r'(?P<conv>[hlL]*[srxXeEfFdiou])',
         ))
 
         return re.compile(field_pattern)

@@ -100,12 +100,12 @@ def truncate(data, max_sz=16):
             collection_iter = enumerate(data)
             result = []
 
-            def add_result(k, v):
+            def add_result(_, v):
                 result.append(v)
 
         for k, v in collection_iter:
-            tv = truncate(data=v, max_sz=max_sz)
-            add_result(k, tv)
+            truncated = truncate(data=v, max_sz=max_sz)
+            add_result(k, truncated)
 
         return result
 
