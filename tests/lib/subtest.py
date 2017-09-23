@@ -55,4 +55,6 @@ def map_test_function(test_instance, test_function, test_cases):
             include_args=log_args, include_kwargs=log_kwargs,
         )(test_function)
 
-        wrapped_test_function(*test_args, **test_kwargs)
+        with test_instance.subTest(num=test_index,
+                                   args=test_args, kwargs=test_kwargs):
+            wrapped_test_function(*test_args, **test_kwargs)
