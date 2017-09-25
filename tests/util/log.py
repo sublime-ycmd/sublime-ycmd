@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-lib/util/log.py
+tests/util/log.py
 Tests for logging utility functions.
 '''
 

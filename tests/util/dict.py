@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-lib/util/dict.py
+tests/util/dict.py
 Tests for dictionary utility functions.
 '''
 

@@ -189,6 +189,8 @@ def main():
     test_runner = unittest.TextTestRunner(
         stream=test_runner_logstream, verbosity=2,
     )
+
+    unittest.installHandler()
     test_runner.run(test_suite)
 
 

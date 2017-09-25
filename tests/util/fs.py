@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-lib/util/fs.py
+tests/util/fs.py
 Tests for file-system utility functions.
 '''
 
