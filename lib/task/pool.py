@@ -2,61 +2,152 @@
 
 '''
 lib/task/pool.py
-Task pool abstraction.
+Task pool abstraction. Replacement for `concurrent.futures`.
 
 Defines a task pool class that can be used to run tasks asynchronously.
+
+Most of this logic was taken from pythonfutures:
+https://github.com/agronholm/pythonfutures
+https://git.io/vdCQ2
 '''
 
+from concurrent.futures import _base as futurebase
 import logging
 import queue
 import threading
 
 from lib.task.task import Task
+from lib.task.worker import spawn_worker
+from lib.util.id import generate_id
+from lib.util.sys import get_cpu_count
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 
 class Pool(object):
+    '''
+    Task pool. Schedules work to run in a thread pool.
 
-    def __init__(self):
+    This class conforms to `concurrent.futures.Executor`. It does not use
+    weak references, however, so it is expected that the application shuts down
+    the pool properly. Worker threads are created as daemons, so they won't
+    stop the program from shutting down.
+    '''
+
+    def __init__(self, max_workers=None, thread_name_prefix=''):
+        if max_workers is None:
+            max_workers = (get_cpu_count() or 1) * 5
+
+        if not isinstance(max_workers, int):
+            raise TypeError('max workers must be an int: %r' % (max_workers))
+        if max_workers <= 0:
+            raise ValueError(
+                'max workers must be positive: %r' % (max_workers)
+            )
+
+        if not isinstance(thread_name_prefix, str):
+            raise TypeError(
+                'thread name prefix must be a str: %r' % (thread_name_prefix)
+            )
+
+        self._max_workers = max_workers
+        self._thread_name_prefix = thread_name_prefix
+
         self._queue = queue.Queue()
-        self._lock = threading.RLock()
-        self._cv = threading.Condition(self._lock)
+        self._workers = None
+        self._lock = threading.Lock()
+        self._running = None
 
-    def empty(self):
-        return self._queue.empty()
+        self._name = None
+        self.name = thread_name_prefix
 
-    def put(self, task, block=True, timeout=None):
-        if not isinstance(task, Task):
-            raise TypeError('task must be a Task: %r' % (task))
+        self.start()
 
-        self._queue.put(task, block=block, timeout=timeout)
-        self._register_task(task)
-        with self._cv:
-            self._cv.notify()
+    def start(self):
+        with self._lock:
+            self._running = True
 
-    def get(self, block=True, timeout=None):
-        task = self._queue.get(block=block, timeout=timeout)    # type: Task
-        return task
+            # NOTE : This unconditionally adds more workers (can go over max).
+            self._create_workers()
 
-    def task_done(self):
-        self._queue.task_done()
+    def _create_workers(self, num_workers=None):
+        if num_workers is None:
+            num_workers = self._max_workers
+        assert isinstance(num_workers, int), \
+            'num workers must be an int: %r' % (num_workers)
 
-    def join(self):
-        # wake all worker threads prior to joining
-        # should not be necessary, but just in case
-        with self._cv:
-            self._cv.notify_all()
+        # check existing workers and issue a warning if it exceeds max
+        num_existing = len(self._workers) if self._workers else 0
+        num_expected = num_workers + num_existing
+        if num_expected > self._max_workers:
+            logger.warning(
+                'starting %d workers when %d already exist, '
+                'total workers will exceed max workers: %d / %d',
+                num_workers, num_existing, num_expected, self._max_workers,
+            )
+            # but fall through and start the new workers anyway
 
-        self._queue.join()
+        created_workers = set(
+            spawn_worker(self, name=generate_id(self._thread_name_prefix))
+            for _ in range(num_workers)
+        )
+        logger.debug('created workers: %r', created_workers)
+
+        if self._workers is None:
+            self._workers = set()
+        self._workers.update(created_workers)
+
+    def submit(self, fn, *args, **kwargs):
+        with self._lock:
+            if not self._running:
+                raise RuntimeError('task pool is not running')
+
+            future = futurebase.Future()
+            task = Task(future, fn, args, kwargs)
+
+            self._queue.put(task)
+
+            return future
+
+    def shutdown(self, wait=True, timeout=None):
+        '''
+        TODO : Fill `shutdown` description.
+
+        The `timeout` parameter is shared between all join operations. It is
+        possible for this function to block for longer than `timeout` seconds.
+        '''
+        with self._lock:
+            self._running = False
+            self._queue.put(None)
+
+        wait_result = True
+        if wait:
+            # create a copy of the worker set, as we'll be removing workers
+            # once they get joined successfully
+            workers = list(self._workers)
+
+            for worker in workers:  # type: Worker
+                try:
+                    worker.join(timeout=timeout)
+                except TimeoutError:
+                    # update overall result to indicate failure
+                    wait_result = False
+                else:
+                    # remove worker from worker set
+                    self._workers.remove(worker)
+
+        return wait_result
 
     @property
-    def cv(self):
-        cv = self._cv       # type: threading.Condition
-        return cv
+    def queue(self):
+        return self._queue
 
-    def _register_task(self, task):
-        assert isinstance(task, Task), \
-            '[internal] task is not a Task: %r' % (task)
+    @property
+    def running(self):
+        with self._lock:
+            return self._running
 
-        task.set_pending(owner=self)
+    def __repr__(self):
+        if self._thread_name_prefix:
+            return '%s(%r)' % ('Pool', self._thread_name_prefix)
+        return 'Pool()'
