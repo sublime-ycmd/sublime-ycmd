@@ -88,7 +88,10 @@ class Worker(object):
                 try:
                     task.run()
                 except Exception as e:
-                    logger.error('exception during task execution: %r', e)
+                    logger.error(
+                        'exception during task execution: %r',
+                        e, exc_info=True,
+                    )
 
                 # explicitly clear reference to task
                 del task

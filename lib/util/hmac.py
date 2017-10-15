@@ -56,6 +56,9 @@ def calculate_hmac(hmac_secret, *content, digestmod=hashlib.sha256):
     '''
     assert isinstance(hmac_secret, (str, bytes)), \
         'hmac secret must be str or bytes: %r' % (hmac_secret)
+    if len(content) == 0:
+        raise ValueError('no data supplied')
+
     hmac_secret = str_to_bytes(hmac_secret)
 
     content_hmac_digests = map(
@@ -64,11 +67,16 @@ def calculate_hmac(hmac_secret, *content, digestmod=hashlib.sha256):
         ), content,
     )
 
-    concatenated_hmac_digests = b''.join(content_hmac_digests)
-
-    hmac_digest_binary = _calculate_hmac(
-        hmac_secret, data=concatenated_hmac_digests, digestmod=digestmod,
-    )
+    if len(content) > 1:
+        # compose individual hmac fragments into one and then hash it again
+        concatenated_hmac_digests = b''.join(content_hmac_digests)
+        hmac_digest_binary = _calculate_hmac(
+            hmac_secret, data=concatenated_hmac_digests, digestmod=digestmod,
+        )
+    else:
+        assert len(content) == 1, \
+            '[internal] number of arguments is not 1: %r' % (content)
+        hmac_digest_binary = next(content_hmac_digests)
 
     hmac_digest_bytes = base64_encode(hmac_digest_binary)
     hmac_digest_str = bytes_to_str(hmac_digest_bytes)

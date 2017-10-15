@@ -2,12 +2,13 @@
 
 '''
 lib/ycmd/start.py
-Server bootstrap logic. Starts up a ycmd server process and returns a handle.
+Server bootstrap logic. Includes a utility class for normalizing parameters and
+calculating default ones. Also includes a helper to set up the temporary
+options file.
 '''
 
 import logging
 import os
-import socket
 import tempfile
 
 from lib.process import (
@@ -15,18 +16,15 @@ from lib.process import (
     Process,
 )
 from lib.util.fs import (
-    is_file,
     default_python_binary_path,
-    get_base_name,
     save_json_file,
 )
-from lib.util.hmac import new_hmac_secret
 from lib.ycmd.constants import (
-    YCMD_HMAC_SECRET_LENGTH,
+    YCMD_LOG_SPOOL_OUTPUT,
+    YCMD_LOG_SPOOL_SIZE,
     YCMD_DEFAULT_SERVER_IDLE_SUICIDE_SECONDS,
     YCMD_DEFAULT_MAX_SERVER_WAIT_TIME_SECONDS,
 )
-from lib.ycmd.server import Server
 from lib.ycmd.settings import (
     get_default_settings_path,
     generate_settings_data,
@@ -40,6 +38,9 @@ class StartupParameters(object):
     Startup parameters for a ycmd server instance.
     Should include all the necessary configuration for creating the ycmd
     server process. Also calculates defaults for certain parameters.
+
+    TODO : Rename `ycmd_settings_path` to `ycmd_default_settings_path`, and
+           add a `ycmd_temp_settings_path` field to this.
     '''
 
     def __init__(self, ycmd_root_directory=None,
@@ -56,7 +57,11 @@ class StartupParameters(object):
         self._server_idle_suicide_seconds = None
         self._max_server_wait_time_seconds = None
 
-        self._ycmd_module_directory = None
+        # additional attributes, can be set via the properties
+        self._log_level = None
+        self._stdout_log_path = None
+        self._stderr_log_path = None
+        self._keep_logs = None
 
         self.ycmd_root_directory = ycmd_root_directory
         self.ycmd_settings_path = ycmd_settings_path
@@ -147,11 +152,84 @@ class StartupParameters(object):
         self._max_server_wait_time_seconds = max_server_wait_time_seconds
 
     @property
+    def log_level(self):
+        return self._log_level
+
+    @log_level.setter
+    def log_level(self, log_level):
+        if log_level is not None and not isinstance(log_level, str):
+            raise TypeError('log level must be a str: %r' % (log_level))
+
+        if log_level is not None and not _is_valid_log_level(log_level):
+            logger.warning('log level unrecognized: %r', log_level)
+            # but fall through and do it anyway
+
+        self._log_level = log_level
+
+    @property
+    def stdout_log_path(self):
+        return self._stdout_log_path
+
+    @stdout_log_path.setter
+    def stdout_log_path(self, stdout_log_path):
+        if stdout_log_path is not None and \
+                not isinstance(stdout_log_path, str):
+            raise TypeError(
+                'stdout log path must be a str: %r' % (stdout_log_path)
+            )
+        self._stdout_log_path = stdout_log_path
+
+    @property
+    def stderr_log_path(self):
+        return self._stderr_log_path
+
+    @stderr_log_path.setter
+    def stderr_log_path(self, stderr_log_path):
+        if stderr_log_path is not None and \
+                not isinstance(stderr_log_path, str):
+            raise TypeError(
+                'stderr_log_path must be a str: %r' % (stderr_log_path)
+            )
+        self._stderr_log_path = stderr_log_path
+
+    @property
+    def keep_logs(self):
+        if self._keep_logs is None:
+            return False
+        return self._keep_logs
+
+    @keep_logs.setter
+    def keep_logs(self, keep_logs):
+        if keep_logs is not None and not isinstance(keep_logs, bool):
+            raise TypeError('keep-logs must be a bool: %r' % (keep_logs))
+        self._keep_logs = keep_logs
+
+    @property
     def ycmd_module_directory(self):
         if self._ycmd_root_directory is None:
             logger.error('no ycmd root directory set')
             raise AttributeError
         return os.path.join(self._ycmd_root_directory, 'ycmd')
+
+    def copy(self):
+        '''
+        Creates a shallow-copy of the startup parameters.
+        '''
+        raw_attrs = [
+            '_ycmd_root_directory',
+            '_ycmd_settings_path',
+            '_working_directory',
+            '_python_binary_path',
+            '_server_idle_suicide_seconds',
+            '_max_server_wait_time_seconds',
+        ]
+        result = StartupParameters()
+
+        for attr in raw_attrs:
+            attr_value = getattr(self, attr)
+            setattr(result, attr, attr_value)
+
+        return result
 
     def __iter__(self):
         ''' Dictionary-compatible iterator. '''
@@ -181,12 +259,22 @@ class StartupParameters(object):
         return '%s(%r)' % (StartupParameters, dict(self))
 
 
-def _to_startup_parameters(ycmd_root_directory,
-                           ycmd_settings_path=None,
-                           working_directory=None,
-                           python_binary_path=None,
-                           server_idle_suicide_seconds=None,
-                           max_server_wait_time_seconds=None):
+def to_startup_parameters(ycmd_root_directory,
+                          ycmd_settings_path=None,
+                          working_directory=None,
+                          python_binary_path=None,
+                          server_idle_suicide_seconds=None,
+                          max_server_wait_time_seconds=None):
+    '''
+    Internal convenience function. Receives the raw arguments to starting a
+    ycmd server and returns a `StartupParameters` instance from it.
+
+    If the first argument is already `StartupParameters`, it is returned as-is,
+    and the remaining parameters are ignored.
+
+    Otherwise, a `StartupParameters` instance is constructed with all the given
+    parameters and returned.
+    '''
     if isinstance(ycmd_root_directory, StartupParameters):
         # great, already in the desired state
         # check if other params are provided and issue a warning
@@ -217,6 +305,7 @@ def _to_startup_parameters(ycmd_root_directory,
         return ycmd_root_directory
 
     # else, generate them
+    logger.warning('[DEPRECATED] to startup parameters', stack_info=True)
     logger.debug(
         'generating startup parameters with root: %s', ycmd_root_directory,
     )
@@ -250,7 +339,7 @@ def write_ycmd_settings_file(ycmd_settings_path, ycmd_hmac_secret, out=None):
     out_path = None
 
     if out is None:
-        # no point using `with` for this, since we also use `delete=True`
+        # no point using `with` for this, since we also use `delete=False`
         temp_file_object = tempfile.NamedTemporaryFile(
             prefix='ycmd_settings_', suffix='.json', delete=False,
         )
@@ -307,35 +396,23 @@ def prepare_ycmd_process(startup_parameters, ycmd_settings_tempfile_path,
         startup_parameters.max_server_wait_time_seconds
     ycmd_module_directory = startup_parameters.ycmd_module_directory
 
-    # toggle-able log file naming scheme
-    # use whichever to test/debug
-    _generate_unique_tmplogs = False
-    if _generate_unique_tmplogs:
-        stdout_file_object = tempfile.NamedTemporaryFile(
-            prefix='ycmd_stdout_', suffix='.log', delete=False,
-        )
-        stderr_file_object = tempfile.NamedTemporaryFile(
-            prefix='ycmd_stderr_', suffix='.log', delete=False,
-        )
-        stdout_file_name = stdout_file_object.name
-        stderr_file_name = stderr_file_object.name
-        stdout_file_object.close()
-        stderr_file_object.close()
-    else:
-        tempdir = tempfile.gettempdir()
-        alnum_working_directory = \
-            ''.join(c if c.isalnum() else '_' for c in working_directory)
-        stdout_file_name = os.path.join(
-            tempdir, 'ycmd_stdout_%s.log' % (alnum_working_directory)
-        )
-        stderr_file_name = os.path.join(
-            tempdir, 'ycmd_stderr_%s.log' % (alnum_working_directory)
+    if YCMD_LOG_SPOOL_OUTPUT:
+        stdout_log_spool = \
+            tempfile.SpooledTemporaryFile(max_size=YCMD_LOG_SPOOL_SIZE)
+        stderr_log_spool = \
+            tempfile.SpooledTemporaryFile(max_size=YCMD_LOG_SPOOL_SIZE)
+
+        logger.debug(
+            'using temporary spools for stdout, stderr: %r, %r',
+            stdout_log_spool, stderr_log_spool,
         )
 
-    logger.critical(
-        '[REMOVEME] keeping log files for stdout, stderr: %s, %s',
-        stdout_file_name, stderr_file_name,
-    )
+        stdout_handle = stdout_log_spool
+        stderr_handle = stderr_log_spool
+    else:
+        # explicitly close handles - don't inherit from this process
+        stdout_handle = FileHandles.DEVNULL
+        stderr_handle = FileHandles.DEVNULL
 
     ycmd_process_handle = Process()
 
@@ -347,129 +424,85 @@ def prepare_ycmd_process(startup_parameters, ycmd_settings_tempfile_path,
         '--idle_suicide_seconds=%s' % (server_idle_suicide_seconds),
         '--check_interval_seconds=%s' % (max_server_wait_time_seconds),
         '--options_file=%s' % (ycmd_settings_tempfile_path),
-        # XXX : REMOVE ME - testing only
-        '--log=debug',
-        '--stdout=%s' % (stdout_file_name),
-        '--stderr=%s' % (stderr_file_name),
-        '--keep_logfiles',
     ])
-    ycmd_process_handle.cwd = working_directory
 
-    ycmd_process_handle.filehandles.stdout = FileHandles.PIPE
-    ycmd_process_handle.filehandles.stderr = FileHandles.PIPE
+    ycmd_process_handle.cwd = working_directory
+    ycmd_process_handle.filehandles.stdout = stdout_handle
+    ycmd_process_handle.filehandles.stderr = stderr_handle
+
+    if startup_parameters.log_level is not None:
+        add_ycmd_debug_args(
+            ycmd_process_handle,
+            log_level=startup_parameters.log_level,
+            stdout_file_name=startup_parameters.stdout_log_path,
+            stderr_file_name=startup_parameters.stderr_log_path,
+            keep_logfiles=startup_parameters.keep_logs,
+        )
 
     return ycmd_process_handle
 
 
-def start_ycmd_server(ycmd_root_directory,
-                      ycmd_settings_path=None,
-                      working_directory=None,
-                      python_binary_path=None,
-                      server_idle_suicide_seconds=None,
-                      max_server_wait_time_seconds=None):
+def add_ycmd_debug_args(ycmd_process_handle, log_level='info',
+                        stdout_file_name=None, stderr_file_name=None,
+                        keep_logfiles=False):
     '''
-    Launches a ycmd server instances and returns a `Server` instance for it.
-    The only required startup parameter is `ycmd_root_directory`. If it is a
-    `str`, then all other (optional) parameters will be calculated with respect
-    to it. If it is `StartupParameters`, then all other parameters are ignored,
-    as that class already contains them all.
+    Adds startup flags to `ycmd_process_handle` to enable logging output.
 
-    If `ycmd_settings_path` is not provided, it is calculated relative to the
-    `ycmd_root_directory` (the repository contains a `default_settings.json`).
-    If `working_directory` is not provided, the current working directory is
-    used, as calculated by the `os` module.
-    If `python_binary_path` is not provided, the system-installed python
-    is used. This implicitly depends on the `PATH` environment variable.
-    If `server_idle_suicide_seconds` is not provided, a default is used.
-    If `max_server_wait_time_seconds` is not provided, a default is used.
+    The `ycmd_process_handle` should be an instance of `Process`.
 
-    It is preferable to use the concrete `StartupParameters` class, since this
-    ends up constructing one anyway if it isn't already in that form.
+    The `log_level` should be one of 'debug', 'info', 'warning', 'error', or
+    'critical'. Any `str` is accepted, this routine does not actually check it.
+
+    If `stdout_file_name` and `stderr_file_name` are provided, the server will
+    write log messages to the given files. The bulk of the logs will be on
+    stderr, with only a few startup messages appearing on stdout.
+
+    If `keep_logfiles` is `True`, then the server won't delete the log files
+    when it exits. Otherwise, the log files will be deleted when it shuts down.
     '''
-    startup_parameters = _to_startup_parameters(
-        ycmd_root_directory,
-        ycmd_settings_path=ycmd_settings_path,
-        working_directory=working_directory,
-        python_binary_path=python_binary_path,
-        server_idle_suicide_seconds=server_idle_suicide_seconds,
-        max_server_wait_time_seconds=max_server_wait_time_seconds,
-    )
-    assert isinstance(startup_parameters, StartupParameters), \
-        '[internal] startup parameters is not StartupParameters: %r' % \
-        (startup_parameters)
-
-    logger.debug(
-        'preparing to start ycmd server with startup parameters: %s',
-        startup_parameters,
-    )
-
-    # update parameters to reflect normalized settings:
-    ycmd_root_directory = startup_parameters.ycmd_root_directory
-    ycmd_settings_path = startup_parameters.ycmd_settings_path
-    working_directory = startup_parameters.working_directory
-    python_binary_path = startup_parameters.python_binary_path
-    server_idle_suicide_seconds = \
-        startup_parameters.server_idle_suicide_seconds
-    max_server_wait_time_seconds = \
-        startup_parameters.max_server_wait_time_seconds
-
-    ycmd_hmac_secret = new_hmac_secret(num_bytes=YCMD_HMAC_SECRET_LENGTH)
-    ycmd_settings_tempfile_path = write_ycmd_settings_file(
-        ycmd_settings_path, ycmd_hmac_secret,
-    )
-
-    if ycmd_settings_tempfile_path is None:
-        logger.error(
-            'failed to generate ycmd server settings file, '
-            'cannot start server'
+    if not isinstance(ycmd_process_handle, Process):
+        raise TypeError(
+            'ycmd process handle must be a Process: %r' % (ycmd_process_handle)
         )
-        return None
+    assert isinstance(ycmd_process_handle, Process)
+    if ycmd_process_handle.alive():
+        raise ValueError(
+            'ycmd process is already started, cannot modify it: %r' %
+            (ycmd_process_handle)
+        )
 
-    ycmd_server_hostname = '127.0.0.1'
-    ycmd_server_port = _get_unused_port(ycmd_server_hostname)
-    ycmd_server_label = get_base_name(working_directory)
+    if not _is_valid_log_level(log_level):
+        logger.warning('log level unrecognized: %r', log_level)
+        # but fall through and do it anyway
 
-    # don't start it up just yet... set up the return value while we can
-    ycmd_process_handle = prepare_ycmd_process(
-        startup_parameters, ycmd_settings_tempfile_path,
-        ycmd_server_hostname, ycmd_server_port,
-    )
+    ycmd_debug_args = [
+        '--log=%s' % (log_level),
+    ]
+    if stdout_file_name and stderr_file_name:
+        ycmd_debug_args.extend([
+            '--stdout=%s' % (stdout_file_name),
+            '--stderr=%s' % (stderr_file_name),
+        ])
 
-    ycmd_server = Server(
-        process_handle=ycmd_process_handle,
-        hostname=ycmd_server_hostname,
-        port=ycmd_server_port,
-        hmac=ycmd_hmac_secret,
-        label=ycmd_server_label,
-    )
+        if keep_logfiles:
+            ycmd_debug_args.append(
+                '--keep_logfiles',
+            )
 
-    def _check_and_remove_settings_tmp():
-        if is_file(ycmd_settings_path):
-            os.remove(ycmd_settings_path)
-
-    try:
-        ycmd_process_handle.start()
-    except ValueError as e:
-        logger.critical('failed to launch ycmd server, argument error: %s', e)
-        _check_and_remove_settings_tmp()
-    except OSError as e:
-        logger.warning('failed to launch ycmd server, system error: %s', e)
-        _check_and_remove_settings_tmp()
-
-    if not ycmd_process_handle.alive():
-        _, stderr = ycmd_process_handle.communicate(timeout=0)
-        logger.error('failed to launch ycmd server, error output: %s', stderr)
-
-    return ycmd_server
+    logger.debug('adding ycmd debug args: %r', ycmd_debug_args)
+    ycmd_process_handle.args.extend(ycmd_debug_args)
 
 
-def _get_unused_port(interface='127.0.0.1'):
-    ''' Finds an available port for the ycmd server process to listen on. '''
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind((interface, 0))
+def _is_valid_log_level(log_level):
+    if not isinstance(log_level, str):
+        raise TypeError('log level must be a str: %r' % (log_level))
 
-    port = sock.getsockname()[1]
-    logger.debug('found unused port: %d', port)
-
-    sock.close()
-    return port
+    # these can be found by running `python /path/to/ycmd/ycmd --help`
+    recognized_log_levels = [
+        'debug',
+        'info',
+        'warning',
+        'error',
+        'critical',
+    ]
+    return log_level in recognized_log_levels

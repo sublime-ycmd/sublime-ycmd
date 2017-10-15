@@ -16,17 +16,25 @@ SUBLIME_SETTINGS_FILENAME = 'sublime-ycmd.sublime-settings'
 '''
 Settings keys.
 
-The "watched" keys are used for detecting changes to the settings file(s).
+The "watch" key is used to register an on-change event for the settings.
+
+The "recognized" keys are used for debugging and logging/pretty-printing.
 
 The "server" keys are used for configuring ycmd servers. Changes to these
 settings should trigger a restart on all running ycmd servers.
 '''
-SUBLIME_SETTINGS_WATCHED_KEYS = [
+SUBLIME_SETTINGS_WATCH_KEY = 'syplugin'
+SUBLIME_SETTINGS_RECOGNIZED_KEYS = [
     'ycmd_root_directory',
     'ycmd_default_settings_path',
     'ycmd_python_binary_path',
     'ycmd_language_whitelist',
     'ycmd_language_blacklist',
+    'ycmd_language_filetype',
+    'ycmd_log_level',
+    'ycmd_log_file',
+    'ycmd_keep_logs',
+    'sublime_ycmd_background_threads',
     'sublime_ycmd_logging_dictconfig_overrides',
     'sublime_ycmd_logging_dictconfig_base',
 ]
@@ -34,6 +42,13 @@ SUBLIME_SETTINGS_YCMD_SERVER_KEYS = [
     'ycmd_root_directory',
     'ycmd_default_settings_path',
     'ycmd_python_binary_path',
+    'ycmd_language_filetype',
+    'ycmd_log_level',
+    'ycmd_log_file',
+    'ycmd_keep_logs',
+]
+SUBLIME_SETTINGS_TASK_POOL_KEYS = [
+    'sublime_ycmd_background_threads',
 ]
 
 '''
@@ -48,7 +63,7 @@ The language scope prefix is stripped off any detected scopes to get the syntax
 base name (e.g. 'c++'). The scope mapping is applied after this step.
 '''
 
-SUBLIME_DEFAULT_LANGUAGE_SCOPE_MAPPING = {
+SUBLIME_DEFAULT_LANGUAGE_FILETYPE_MAPPING = {
     'c++': 'cpp',
     'js': 'javascript',
 }

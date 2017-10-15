@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 
 '''
-lib/subl/settings.py
-Plugin settings class.
+lib/subl/view.py
+View wrapper class.
 
-Wraps the settings `dict` and exposes them as attributes on the class. Default
-settings will be calculated for missing/blank settings if possible.
-
-This is also meant to abstract the setting key names, so there aren't as many
-hard-coded strings in the main plugin logic.
+Extends `sublime.View` to pre-calculate/cache view metadata. Also includes a
+container interface to allow setting arbitrary metadata on the view.
 '''
 
 import logging
@@ -20,7 +17,7 @@ except ImportError:
 
 from lib.schema.request import RequestParameters
 from lib.subl.constants import (
-    SUBLIME_DEFAULT_LANGUAGE_SCOPE_MAPPING,
+    SUBLIME_DEFAULT_LANGUAGE_FILETYPE_MAPPING,
     SUBLIME_LANGUAGE_SCOPE_PREFIX,
 )
 from lib.util.fs import (
@@ -540,7 +537,7 @@ def get_file_types(view, scope_position=0):
 
     # TODO : Use `Settings` to get the scope mapping dynamically.
     source_types = list(map(
-        lambda s: SUBLIME_DEFAULT_LANGUAGE_SCOPE_MAPPING.get(s, s),
+        lambda s: SUBLIME_DEFAULT_LANGUAGE_FILETYPE_MAPPING.get(s, s),
         source_names
     ))
     logger.debug(

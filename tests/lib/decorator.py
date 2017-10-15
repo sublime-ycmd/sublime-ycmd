@@ -4,6 +4,7 @@ tests/lib/decorator.py
 Defines decorators for wrapping test functions.
 '''
 
+import functools
 import logging
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
@@ -135,6 +136,7 @@ def log_function(desc=None, logger=None,
 
         desc = get_desc(fn)
 
+        @functools.wraps(fn)
         def log_function_run(*args, **kwargs):
             with LoggingContext(logger=logger, desc=desc):
                 if include_args and include_kwargs:

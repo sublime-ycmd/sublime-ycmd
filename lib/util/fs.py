@@ -175,8 +175,6 @@ def resolve_binary_path(binpath, workingdir=None, *pathdirs):
                 for win_ext in win_exts:
                     filebasename = '%s%s' % (binpath, win_ext)
                     yield os.path.join(pathdir, filebasename)
-        # end of iteration
-        yield None
 
     found_files = filter(os.path.isfile, generate_binpaths())
 

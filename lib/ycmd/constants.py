@@ -15,6 +15,14 @@ https://github.com/Valloric/ycmd/blob/master/ycmd/handlers.py
 '''
 
 '''
+Log output. Use temporary spools to buffer and parse any startup errors.
+
+Not user configurable (users can specify stdout/stderr path instead).
+'''
+YCMD_LOG_SPOOL_OUTPUT = True
+YCMD_LOG_SPOOL_SIZE = 2048
+
+'''
 HMAC header information.
 
 Not user configurable (likely won't change).

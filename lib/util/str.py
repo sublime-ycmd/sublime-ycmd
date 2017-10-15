@@ -121,3 +121,25 @@ def truncate(data, max_sz=16):
         return data
 
     return _truncate_str(data=data_str, max_sz=max_sz)
+
+
+def remove_prefix(data, prefix):
+    '''
+    Returns a copy of `data` with the leading `prefix` removed.
+
+    The data should be either `bytes` or `str`, with a matching prefix type.
+
+    If the prefix is not in the data, the data is returned as-is.
+    '''
+    if not isinstance(data, (bytes, str)):
+        raise TypeError('data must be bytes or str: %r' % (data))
+    if not isinstance(prefix, (bytes, str)):
+        raise TypeError('prefix must be bytes or str: %r' % (prefix))
+
+    # don't check that the types match - let the builtins complain
+    if data.startswith(prefix):
+        sz = len(prefix)
+        return data[sz:]
+
+    # else, return an explicit copy
+    return data[:]

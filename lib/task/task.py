@@ -29,15 +29,21 @@ class Task(object):
             # cancelled, skip it
             return
 
+        logger.debug('starting task: %r', self)
+
         try:
             result = self._fn(*self._args, **self._kwargs)
+        except Exception as exception:
+            self._future.set_exception(exception)
         except:     # noqa: E722
-            # failure - set exception details
-            exception, traceback = sys.exc_info()[1:]
-            self._future.set_exception(exception, traceback)
+            # failure - old style exceptions
+            exception = sys.exc_info()[1]
+            self._future.set_exception(exception)
         else:
             # success - set result
             self._future.set_result(result)
+
+        logger.debug('finished task: %r', self)
 
     def __repr__(self):
         return '%s(%r)' % ('Task', {

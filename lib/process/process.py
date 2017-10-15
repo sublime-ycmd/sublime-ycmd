@@ -45,11 +45,15 @@ class Process(object):
     def binary(self, binary):
         ''' Sets the process binary. '''
         assert isinstance(binary, str), 'binary must be a string: %r' % binary
-        binary = resolve_binary_path(binary)
-        assert is_file(binary), 'binary path invalid: %r' % binary
 
-        logger.debug('setting binary to: %s', binary)
-        self._binary = binary
+        resolved_binary = resolve_binary_path(binary)
+        if resolved_binary is None:
+            raise RuntimeError('failed to locate binary: %r' % (binary))
+
+        assert is_file(resolved_binary), 'binary path invalid: %r' % (binary)
+
+        logger.debug('setting binary to: %s', resolved_binary)
+        self._binary = resolved_binary
 
     @property
     def args(self):
@@ -125,7 +129,10 @@ class Process(object):
         assert isinstance(self._handle, subprocess.Popen), \
             '[internal] handle is not a Popen instance: %r' % self._handle
         status = self._handle.poll()
-        logger.debug('process handle status: %r', status)
+
+        status_desc = 'alive' if status is None else 'exited (%r)' % (status)
+        logger.debug('process handle status: %s', status_desc)
+
         return status is None
 
     def start(self):
@@ -169,14 +176,19 @@ class Process(object):
         assert self._handle is not None, '[internal] process handle is null'
         return self._handle.communicate(inpt, timeout)
 
-    def wait(self, maxwait=10):
-        ''' Waits maxwait seconds for the process to finish. '''
+    def wait(self, timeout=10):
+        ''' Waits `timeout` seconds for the process to finish. '''
         if not self.alive():
             logger.debug('process not alive, nothing to wait for')
             return
 
         assert self._handle is not None, '[internal] process handle is null'
-        self._handle.wait(maxwait)
+
+        try:
+            self._handle.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            # re-raise as `TimeoutError` to keep things consistent
+            raise TimeoutError(e)
 
     def kill(self):
         ''' Kills the associated process by sending a signal. '''

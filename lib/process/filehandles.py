@@ -51,6 +51,12 @@ class FileHandles(object):
         if handle is None or isinstance(handle, io.IOBase):
             return True
 
+        # file-like requires at least `read` and `write`
+        readable = hasattr(handle, 'read') and callable(handle.read)
+        writable = hasattr(handle, 'write') and callable(handle.write)
+        if readable and writable:
+            return True
+
         # explicitly allow the special flags as well
         return handle in [
             FileHandles.PIPE,

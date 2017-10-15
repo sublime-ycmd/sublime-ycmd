@@ -151,3 +151,53 @@ class Pool(object):
         if self._thread_name_prefix:
             return '%s(%r)' % ('Pool', self._thread_name_prefix)
         return 'Pool()'
+
+
+def disown_task_pool(task_pool, name=None, daemon=None):
+    '''
+    Shuts down a task pool on a daemon thread. The thread allows the task pool
+    to run to completion. Once it is completed, the thread itself terminates.
+
+    TODO : Store a weak ref to the pool, in case we need to hard-stop a buggy
+           one that keeps running indefinitely.
+    '''
+
+    if name is None:
+        name = generate_id('shutdown-task-pool-')
+
+    if daemon is None:
+        daemon = True
+
+    # Until the TODO is done, the interim solution is to give a grace period.
+    # Specify the time limit for shutting down in seconds.
+    _TASK_POOL_SHUTDOWN_GRACE = (5 * 60)        # 5 minutes
+
+    def shutdown_task_pool(task_pool=task_pool,
+                           timeout=_TASK_POOL_SHUTDOWN_GRACE):
+        logger.debug('task pool shutdown thread has started')
+
+        try:
+            logger.debug('waiting for task pool to shut down...')
+            if task_pool.shutdown(wait=True, timeout=timeout):
+                logger.debug('task pool has shut down successfully')
+            else:
+                logger.warning(
+                    'task pool did not shut down in %ss, ignoring it', timeout,
+                )
+        except Exception as e:
+            logger.error('unhandled error during task pool shutdown: %r', e)
+
+        # explicitly clear reference to the pool
+        del task_pool
+
+        logger.debug('task pool shutdown thread finished, about to exit')
+
+    shutdown_thread = threading.Thread(
+        target=shutdown_task_pool, name=name, daemon=daemon,
+    )
+
+    logger.debug('shutting down task pool on thread: %r', shutdown_thread)
+    shutdown_thread.start()
+
+    logger.debug('thread started, task pool will be shut down')
+    return shutdown_thread

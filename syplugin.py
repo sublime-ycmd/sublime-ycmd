@@ -24,16 +24,16 @@ from lib.schema import (
 from lib.subl.settings import (
     Settings,
     bind_on_change_settings,
+    has_same_ycmd_settings,
+    has_same_task_pool_settings,
 )
 from lib.subl.view import (
-    View,
-    get_view_id,
     get_path_for_view,
 )
-from lib.ycmd.server import Server
-from lib.ycmd.start import (
-    start_ycmd_server,
-)
+from lib.ycmd.start import StartupParameters
+
+from plugin.server import SublimeYcmdServerManager
+from plugin.view import SublimeYcmdViewManager
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -49,395 +49,13 @@ finally:
     assert isinstance(_HAS_LOADED_ST, bool)
 
 
-def configure_logging(dict_config, logger=None):
+def configure_logging(dict_config):
     '''
     Configures the logging module (or plugin-specific root logger) to log with
     the configuration in the given `dict_config`.
     The dictionary configuration must be compatible with `logging.config`.
     '''
-    # pylint: disable=redefined-outer-name
-
-    if logger is None:
-        logger = logging.getLogger('sublime-ycmd')
-    if not isinstance(logger, logging.Logger):
-        raise TypeError('logger should be a Logger: %r' % (logger))
-
     logging.config.dictConfig(dict_config)
-
-
-class SublimeYcmdServerManager(object):
-    '''
-    Singleton helper class. Runs, manages, and stops ycmd server instances.
-    Generally, each project will have its own associated backend ycmd server.
-    This is required for certain completers, like tern, that rely on the
-    working directory in order to find imported files.
-    '''
-
-    def __init__(self):
-        self._servers = []
-        self.reset()
-
-    def reset(self,
-              ycmd_root_directory=None,
-              ycmd_default_settings_path=None,
-              ycmd_python_binary_path=None):
-        if self._servers:
-            for server in self._servers:
-                if not isinstance(server, Server):
-                    logger.error(
-                        'invalid server handle, clearing it: %r', server
-                    )
-                    continue
-
-                if not server.alive():
-                    logger.debug('skipping dead server: %s', server)
-                    continue
-
-                logger.debug('stopping server: %s', server)
-
-                # TODO : make this shutdown async - it might block...
-                server.stop()
-
-                if server.alive():
-                    logger.warning(
-                        'server did not stop, doing hard shutdown: %s', server
-                    )
-                    server.stop(hard=True)
-
-            logger.info('all ycmd servers have been shut down')
-
-        # server startup parameters:
-        self._ycmd_root_directory = ycmd_root_directory
-        self._ycmd_default_settings_path = ycmd_default_settings_path
-        self._ycmd_python_binary_path = ycmd_python_binary_path
-
-        # active servers:
-        self._servers = []
-
-        # lookup tables:
-        self._view_id_to_server = {}
-        self._working_directory_to_server = {}
-
-    def get_servers(self):
-        '''
-        Returns a shallow-copy of the list of managed `Server` instances.
-        '''
-        return self._servers[:]
-
-    def get_server_for_view(self, view):    # type (sublime.View) -> Server
-        '''
-        Returns a `Server` instance that has a suitable working directory for
-        use with the supplied `view`.
-        If one does not exist, it will be created.
-        '''
-        if not isinstance(view, (sublime.View, View)):
-            raise TypeError('view must be a View: %r' % (view))
-
-        view_id = get_view_id(view)
-        if view_id is None:
-            logger.error('failed to get view ID for view: %r', view)
-            raise TypeError('view id must be an int: %r' % (view))
-
-        view_working_dir = get_path_for_view(view)
-
-        server = None
-        if view_id is not None and view_id in self._view_id_to_server:
-            server = self._view_id_to_server[view_id]
-        elif view_working_dir is not None and \
-                view_working_dir in self._working_directory_to_server:
-            # map the view id to this server as well, for future lookups
-            server = self._working_directory_to_server[view_working_dir]
-            self._view_id_to_server[view_id] = server
-
-        if server and not server.alive():
-            # stale server, clear it and allocate another
-            logger.info('removing stale server: %s', server.pretty_str())
-
-            # XXX(akshay) : REMOVE - this is for grabbing startup errors
-            stdout, stderr = server.communicate()
-            logger.debug('[REMOVEME] stdout, stderr: %s, %s', stdout, stderr)
-
-            self._unregister_server(server)
-            server = None
-
-        if not server:
-            logger.info(
-                'creating ycmd server for project directory: %s',
-                view_working_dir,
-            )
-            server = start_ycmd_server(
-                self._ycmd_root_directory,
-                ycmd_settings_path=self._ycmd_default_settings_path,
-                python_binary_path=self._ycmd_python_binary_path,
-                working_directory=view_working_dir,
-            )
-            self._servers.append(server)
-
-        self._view_id_to_server[view_id] = server
-        self._working_directory_to_server[view_working_dir] = server
-
-        return server   # type: Server
-
-    def _unregister_server(self, server):
-        assert isinstance(server, Server), \
-            '[internal] server must be Server: %r' % (server)
-        if server not in self._servers:
-            logger.error(
-                'server was never registered in server manager: %s',
-                server.pretty_str(),
-            )
-            return False
-
-        view_map = self._view_id_to_server
-        view_keys = list(filter(
-            lambda k: view_map[k] == server, view_map,
-        ))
-        logger.debug('clearing server for views: %s', view_keys)
-        for view_key in view_keys:
-            del view_map[view_key]
-
-        working_directory_map = self._working_directory_to_server
-        working_directory_keys = list(filter(
-            lambda k: working_directory_map[k] == server,
-            working_directory_map,
-        ))
-        logger.debug(
-            'clearing server for working directories: %s',
-            working_directory_keys,
-        )
-        for working_directory_key in working_directory_keys:
-            del working_directory_map[working_directory_key]
-
-        self._servers.remove(server)
-
-    def __contains__(self, view):
-        view_id = get_view_id(view)
-        if view_id is None:
-            logger.error('failed to get view ID for view: %r', view)
-            raise TypeError('view id must be an int: %r' % (view))
-
-        return view_id in self._view_id_to_server
-
-    def __getitem__(self, view):
-        return self.get_server_for_view(view)   # type: Server
-
-    def __len__(self):
-        return len(self._servers)
-
-
-class SublimeYcmdViewManager(object):
-    '''
-    Singleton helper class. Manages wrappers around sublime view instances.
-    The wrapper class `View` is used around `sublime.View` to cache certain
-    calculations, and to store view-specific variables/state.
-    Although this abstraction isn't strictly necessary, it can save expensive
-    operations like file path calculation and ycmd event notification.
-    '''
-
-    def __init__(self):
-        # maps view IDs to `View` instances
-        self._views = {}
-        self.reset()
-
-    def reset(self):
-        if self._views:
-            view_ids = list(self._views.keys())
-            for view_id in view_ids:
-                self._unregister_view(view_id)
-
-            logger.info('all views have been unregistered')
-
-        # active views:
-        self._views = {}
-
-    def get_wrapped_view(self, view):
-        '''
-        Returns an instance of `View` corresponding to `view`. If one does
-        not exist, it will be created, if possible.
-        If the view is provided as an ID (int), then the lookup is performed
-        as normal, but a `KeyError` will be raised if it does not exist.
-        If the view is an instance of `sublime.View`, then the lookup is again
-        performed as usual, but will be created if it does not exist.
-        Finally, if the view is an instance of `View`, it is returned as-is.
-        '''
-        assert isinstance(view, (int, sublime.View, View)), \
-            'view must be a View: %r' % (view)
-
-        if isinstance(view, View):
-            return view
-
-        view_id = get_view_id(view)
-        if view_id is None:
-            logger.error('failed to get view ID for view: %r', view)
-            raise TypeError('view id must be an int: %r' % (view))
-
-        if view_id not in self._views:
-            if not isinstance(view, sublime.View):
-                logger.warning(
-                    'view has not been registered for id: %s', view_id,
-                )
-                raise KeyError('view id is not registered: %r' % (view_id))
-
-            logger.debug('view is not registered, creating a wrapper for it')
-            wrapped_view = View(view)
-            self._views[view_id] = wrapped_view
-
-        assert view_id in self._views, \
-            '[internal] view id was not registered properly: %r' % (view_id)
-        return self._views[view_id]     # type: View
-
-    def has_notified_ready_to_parse(self, view, server):
-        '''
-        Returns true if the given `view` has been parsed by the `server`. This
-        must be done at least once to ensure that the ycmd server has a list
-        of identifiers to offer in completion results.
-        This works by storing a view-specific variable indicating the server,
-        if any, that the view has been uploaded to. If this variable is not
-        set, or if the variable refers to another server, this method will
-        return false. In that case, the notification should probably be sent.
-        '''
-        view = self.get_wrapped_view(view)
-        if not view:
-            logger.error('unknown view type: %r', view)
-            raise TypeError('view must be a View: %r' % (view))
-
-        # TODO : Move magic string constants to a more centralized place.
-        if 'last_notified_server' not in view:
-            logger.debug('view has not been sent to any server: %s', view)
-            return False
-
-        # accept servers either as strings or as `Server` instances:
-        supplied_server_key = str(server)
-        notified_server_key = view['last_notified_server']
-
-        logger.debug(
-            'last notified server, supplied server key: %s, %s',
-            notified_server_key, supplied_server_key,
-        )
-
-        if notified_server_key == supplied_server_key:
-            return True
-
-        if 'notified_servers' not in view:
-            logger.debug('view has not been sent to any server: %s', view)
-            return False
-
-        notified_servers = view['notified_servers']
-        assert isinstance(notified_servers, dict), \
-            '[internal] notified server map is not a dict: %r' % \
-            (notified_servers)
-
-        has_notified_for_server_key = (
-            supplied_server_key in notified_servers and
-            notified_servers[supplied_server_key]
-        )
-        logger.debug(
-            'has notified server: %s ? %s',
-            supplied_server_key, has_notified_for_server_key,
-        )
-
-        return has_notified_for_server_key
-
-    def set_notified_ready_to_parse(self, view, server, has_notified=True):
-        '''
-        Updates the variable that indicates that the given `view` has been
-        parsed by the `server`.
-        This works by setting a view-specific variable indicating the server,
-        that the view has been uploaded to. The same variable can then be
-        checked in `has_notified_ready_to_parse`.
-        '''
-        view = self.get_wrapped_view(view)
-        if not view:
-            logger.error('unknown view type: %r', view)
-            raise TypeError('view must be a View: %r' % (view))
-
-        # TODO : Move magic string constants to a more centralized place.
-        if 'last_notified_server' not in view:
-            # initialize, but leave it blank
-            view['last_notified_server'] = None
-        if 'notified_servers' not in view:
-            # initialize, but leave it empty
-            view['notified_servers'] = {}
-
-        # accept servers either as strings or as `Server` instances:
-        supplied_server_key = str(server)
-
-        notified_server_key = view['last_notified_server']
-        notified_servers = view['notified_servers']
-
-        if has_notified:
-            # unconditionally set with the given server key
-            view['last_notified_server'] = supplied_server_key
-            notified_servers[supplied_server_key] = True
-            return
-
-        # clear the variables, if set
-        if notified_server_key == supplied_server_key:
-            # that was the last notified, but not anymore!
-            view['last_notified_server'] = None
-        if supplied_server_key in notified_servers:
-            # that was flagged as notified, so unflag it
-            del notified_servers[supplied_server_key]
-
-    def _register_view(self, view):
-        assert isinstance(view, (sublime.View, View)), \
-            'view must be a View: %r' % (view)
-
-        view_id = get_view_id(view)
-        if view_id is None:
-            logger.error('failed to get view ID for view: %r', view)
-            raise TypeError('view id must be an int: %r' % (view))
-
-        if view_id in self._views:
-            logger.warning('view has already been registered, id: %s', view_id)
-
-        if isinstance(view, sublime.View):
-            view = View(view)
-        elif not isinstance(view, View):
-            logger.error('unknown view type: %r', view)
-            raise TypeError('view must be a View: %r' % (view))
-
-        self._views[view_id] = view
-        return view_id
-
-    def _unregister_view(self, view):
-        view_id = get_view_id(view)
-        if view_id is None:
-            logger.error('failed to get view ID for view: %r', view)
-            raise TypeError('view id must be an int: %r' % (view))
-
-        if view_id not in self._views:
-            logger.debug(
-                'view was never registered, ignoring id: %s', view_id,
-            )
-            return False
-
-        del self._views[view_id]
-        return True
-
-    def get_views(self):
-        '''
-        Returns a shallow-copy of the map of managed `View` instances.
-        '''
-        return self._views.copy()
-
-    def __contains__(self, view):
-        view_id = get_view_id(view)
-        if view_id is None:
-            logger.error('failed to get view ID for view: %r', view)
-            raise TypeError('view id must be an int: %r' % (view))
-
-        return view_id in self._views
-
-    def __getitem__(self, view):
-        return self.get_wrapped_view(view)
-
-    def __len__(self):
-        return len(self._views)
-
-    def __bool__(self):
-        ''' Returns `True`, so an instance is always truthy. '''
-        return True
 
 
 class SublimeYcmdState(object):
@@ -449,59 +67,78 @@ class SublimeYcmdState(object):
     def __init__(self):
         self._server_manager = SublimeYcmdServerManager()
         self._view_manager = SublimeYcmdViewManager()
+        self._settings = None
         self.reset()
 
     def reset(self):
         ''' Stops all ycmd servers and clears all settings. '''
-        self._server_manager.reset()
+        self._server_manager.shutdown(hard=True, timeout=0)
+        self._server_manager.set_background_threads(1)
+
         self._view_manager.reset()
+
         self._settings = None
 
     def configure(self, settings):
         '''
         Receives a `settings` object and reconfigures the state from it.
-        The settings should be an instance of `Settings`. See `lib.st` for
+        The settings should be an instance of `Settings`. See `lib.subl` for
         helpers to generate these settings.
+
+        TODO : Shutdown/reconfigure only what's necessary:
         If there are changes to the ycmd server settings, then the state will
         automatically stop all currently running servers. They will be
         relaunched with the new parameters when a completion request is made.
+        If there are changes to the task pool settings, then the worker threads
+        will be shut down and recreated according to the new settings.
         If there are changes to the logging settings, then the state will
         reconfigure the logger without messing with any ycmd servers.
-        The inspected settings are:
-            ycmd_root_directory (str): Path to ycmd root directory.
-            ycmd_default_settings_path (str): Path to default ycmd settings.
-                If omitted, it is calculated based on the ycmd root directory.
-            ycmd_python_binary_path (str): Path to the python binary used to
-                run the ycmd module (i.e. start the server).
-                This should match the version that was used to build ycmd.
-                If omitted, the system PATH is used to find it.
-            ycmd_language_whitelist (list of str): Scope selectors to enable
-                ycmd completion for.
-                If omitted, or empty, all scopes are whitelisted.
-            ycmd_language_blacklist (list of str): Scope selectors to disable
-                ycmd completion for. These scopes are checked after the
-                whitelist, so the blacklist has higher priority.
-                If omitted, or empty, no scopes are blacklisted.
-            sy_log_level (str): Minimum severity level to log at. Should be one
-                of the constants from the `logging` module: 'DEBUG', 'INFO',
-                'WARNING', 'ERROR', 'CRITICAL'.
         '''
         assert isinstance(settings, Settings), \
             'settings must be Settings: %r' % (settings)
 
-        requires_restart = self._requires_ycmd_restart(settings)
-        if requires_restart:
-            logger.debug('new settings require ycmd server restart, resetting')
-            self.reset()
-
-        self._server_manager.reset(
-            ycmd_root_directory=settings.ycmd_root_directory,
-            ycmd_default_settings_path=settings.ycmd_default_settings_path,
-            ycmd_python_binary_path=settings.ycmd_python_binary_path,
-        )
         logging_dictconfig = settings.sublime_ycmd_logging_dictconfig
         if logging_dictconfig:
             configure_logging(logging_dictconfig)
+
+        # TODO : Use `_requires_ycmd_restart` and `_requires_task_pool_restart`
+        #        to reset only what's necessary.
+        if self._requires_ycmd_restart(settings):
+            logger.debug(
+                'shutting down existing ycmd servers, '
+                'they will be restarted as required'
+            )
+            self._server_manager.shutdown(hard=False, timeout=0)
+
+        # generate ycmd server startup parameters based on settings
+        startup_parameters = StartupParameters(
+            settings.ycmd_root_directory,
+            ycmd_settings_path=settings.ycmd_default_settings_path,
+            python_binary_path=settings.ycmd_python_binary_path,
+
+            # leave `working_directory` blank, it gets filled in later
+            working_directory=None,
+
+            # TODO : Allow settings to override the defaults for these:
+            server_idle_suicide_seconds=None,
+            max_server_wait_time_seconds=None,
+        )
+        # XXX : Somehow get the log parameters in `settings` into the startup
+        #       parameters used by the server manager.
+        logger.info(
+            'new servers will start with parameters: %s', startup_parameters,
+        )
+        self._server_manager.set_startup_parameters(startup_parameters)
+        self._server_manager.set_server_logging(
+            log_level=settings.ycmd_log_level,
+            log_file=settings.ycmd_log_file,
+            keep_logs=settings.ycmd_keep_logs,
+        )
+
+        if self._requires_task_pool_restart(settings):
+            logger.debug('shutting down and recreating task pool')
+            background_threads = settings.sublime_ycmd_background_threads
+            self._server_manager.set_background_threads(background_threads)
 
         logger.debug('successfully configured with settings: %s', settings)
         self._settings = settings
@@ -520,8 +157,8 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, ignoring activate event')
             return False
 
-        server = self._server_manager[view]     # type: Server
-        view = self._view_manager[view]         # type: View
+        view = self._view_manager[view]             # type: View
+        server = self._server_manager.get(view)     # type: Server
         if not server:
             logger.debug('no server for view, ignoring activate event')
             return False
@@ -532,25 +169,38 @@ class SublimeYcmdState(object):
         if not view.ready():
             logger.debug('file is not ready for parsing, ignoring')
             return False
+        if not view.file_types:
+            logger.debug('file has no associated file types, ignoring it')
+            # in this case, return true to indicate that this is acceptable
+            return True
 
-        request_params = view.generate_request_parameters()
-        if not request_params:
-            logger.debug('failed to generate request params, abort')
-            return False
+        # TODO : Use view manager to determine when file needs to be re-parsed.
+        parse_file = True
 
-        if not self._view_manager.has_notified_ready_to_parse(view, server):
+        notify_future = self._server_manager.notify_enter(
+            view, parse_file=parse_file,
+        )
+
+        def on_notified_ready_to_parse(future):
+            ''' Called by `Future.add_done_callback` after completion. '''
+            if future.cancelled():
+                logger.debug('notification was cancelled, ignoring result')
+                return
+
+            if future.exception():
+                logger.debug('notification failed, ignoring result')
+                return
+
             logger.debug(
-                'file has not been sent to the server yet, doing that first'
+                'finished notifying server, marking view as having been sent'
             )
-            server.notify_file_ready_to_parse(request_params)
-            self._view_manager.set_notified_ready_to_parse(view, server)
-        else:
-            logger.debug(
-                'file has been sent to the server previously, skipping that'
+            self._view_manager.set_notified_ready_to_parse(
+                view, server, has_notified=True,
             )
 
-        logger.debug('sending notification for entering buffer')
-        server.notify_buffer_enter(request_params)
+        # As noted above, always notify, so always set the flag
+        notify_future.add_done_callback(on_notified_ready_to_parse)
+
         return True
 
     def deactivate_view(self, view):
@@ -565,8 +215,8 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, ignoring deactivate event')
             return False
 
-        server = self._server_manager[view]     # type: Server
-        view = self._view_manager[view]         # type: View
+        view = self._view_manager[view]             # type: View
+        server = self._server_manager.get(view)     # type: Server
         if not server:
             logger.debug('no server for view, ignoring deactivate event')
             return False
@@ -577,6 +227,10 @@ class SublimeYcmdState(object):
         if not view.ready():
             logger.debug('file is not ready for parsing, ignoring')
             return False
+        if not view.file_types:
+            logger.debug('file has no associated file types, ignoring it')
+            # in this case, return true to indicate that this is acceptable
+            return True
 
         request_params = view.generate_request_parameters()
         if not request_params:
@@ -593,34 +247,33 @@ class SublimeYcmdState(object):
                 'file has unsaved changes, '
                 'so it will need to be sent to the server again'
             )
-            if self._view_manager.has_notified_ready_to_parse(view, server):
-                logger.debug(
-                    'removing flag, it will be re-uploaded when selected again'
-                )
-                self._view_manager.set_notified_ready_to_parse(
-                    view, server, has_notified=False,
-                )
+            # unlike the buffer enter event, we can unflag immediately, instead
+            # of asynchronously after the notification has been sent
+            # worst case: have to notify ready-to-parse more than required
+            self._view_manager.set_notified_ready_to_parse(
+                view, server, has_notified=False,
+            )
 
         logger.debug('sending notification for unloading buffer')
-        server.notify_buffer_leave(request_params)
+        self._server_manager.notify_exit(view)
+
         return True
 
     def completions_for_view(self, view):
         '''
-        Registers and notifies the ycmd server to prepare for events on the
-        given `view`. The first time a view is passed in, it is parsed by the
-        server to generate the initial list of identifiers. Then, an event
-        notification is sent to the server to indicate that the view is open
-        in the editor (and any unsaved buffer data is sent over for additional
-        parsing).
+        Sends a completion request to the ycmd server for a given `view`.
+        The response will be parsed and provided in a format that is compatible
+        with what `sublime` expects (i.e. an iterable of completion tuples).
+
+        This call will block, so it should ideally be run off-thread.
         '''
         state = _get_plugin_state()
         if not state:
             logger.debug('no plugin state, cannot provide completions')
             return None
 
-        server = self._server_manager[view]     # type: Server
-        view = self._view_manager[view]         # type: View
+        view = self._view_manager[view]             # type: View
+        server = self._server_manager.get(view)     # type: Server
         if not server:
             logger.debug('no server for view, cannot request completions')
             return None
@@ -632,26 +285,43 @@ class SublimeYcmdState(object):
             logger.debug('file is not ready for parsing, abort')
             return None
 
+        # don't do a full health check, just check the status and process:
+        if not server.is_alive(timeout=0):
+            logger.debug('server is not running, abort')
+            return None
+
         request_params = view.generate_request_parameters()
         if not request_params:
             logger.debug('failed to generate request params, abort')
-            return False
+            return None
 
         if not self._view_manager.has_notified_ready_to_parse(view, server):
             logger.debug(
                 'file has not been sent to the server yet, '
-                'probably missed a view event'
+                'may have missed a view event'
             )
-            server.notify_file_ready_to_parse(request_params)
-            self._view_manager.set_notified_ready_to_parse(view, server)
+            # send a notification, but don't wait around
+            # this may result in poor completions this time around, but at
+            # least the identifiers will be handy for the next time
+            self.activate_view(view)
 
         logger.debug('sending completion request for view')
-        completions = server.get_code_completions(request_params)
+        try:
+            # NOTE : This call blocks!!
+            completions = server.get_code_completions(
+                request_params, timeout=0.2,
+            )
+        except TimeoutError:
+            logger.debug('completion request timed out')
+            completions = None
         logger.debug('got completions for view: %s', completions)
 
-        # TODO : Gracefully handle this by returning None
+        if not completions:
+            logger.debug('no completions, returning none')
+            return None
+
         assert isinstance(completions, Completions), \
-            '[TODO] completions must be Completions: %r' % (completions)
+            '[internal] completions must be Completions: %r' % (completions)
 
         def _st_completion_tuple(completion):
             assert isinstance(completion, CompletionOption), \
@@ -668,15 +338,6 @@ class SublimeYcmdState(object):
             )
 
         st_completion_list = [_st_completion_tuple(c) for c in completions]
-        logger.critical(
-            '[REMOVEME] generated completion data: %s', st_completion_list,
-        )
-
-        # TODO : Turn it on after disabling anaconda
-        if 'python' in view.file_types:
-            logger.critical('[TODO] enable for python, disable anaconda')
-            return None
-
         return st_completion_list
 
     def __contains__(self, view):
@@ -710,7 +371,23 @@ class SublimeYcmdState(object):
         assert isinstance(self._settings, Settings), \
             '[internal] settings must be Settings: %r' % (self._settings)
 
-        return self._settings != settings
+        return has_same_ycmd_settings(self._settings, settings)
+
+    def _requires_task_pool_restart(self, settings):
+        '''
+        Returns true if the given `settings` would require a restart of any
+        task workers. Same logic as `_requires_ycmd_restart`.
+        '''
+        assert isinstance(settings, Settings), \
+            '[internal] settings must be Settings: %r' % (settings)
+
+        if not self._settings:
+            # no settings - always trigger restart
+            return True
+        assert isinstance(self._settings, Settings), \
+            '[internal] settings must be Settings: %r' % (self._settings)
+
+        return has_same_task_pool_settings(self._settings, settings)
 
     def _enabled_for_scopes(self, view, locations):
         '''
@@ -1013,26 +690,63 @@ class SublimeYcmdReloadPlugin(sublime_plugin.TextCommand):
             if PKG_NAME in sys.modules:
                 pkg_module = sys.modules[PKG_NAME]
 
-                def recursive_reload(current_module=pkg_module, tally=set()):
+                def get_module(current_module=pkg_module):
+                    if type(current_module) is ModuleType:
+                        return current_module
+
+                    module_name = getattr(current_module, '__module__', None)
+                    if not module_name:
+                        return None
+
+                    if isinstance(module_name, str):
+                        return sys.modules.get(module_name, None)
+                    return None
+
+                def recursive_reload(current_module=pkg_module, tally=None):
                     # type: (ModuleType, set) -> None
+                    if tally is None:
+                        tally = set()
+
                     logger.info('reloading %s', current_module.__name__)
                     reload(current_module)
+
                     for module_local_name in dir(current_module):
-                        submodule = getattr(current_module, module_local_name)
+                        module_item = getattr(
+                            current_module, module_local_name
+                        )
+                        submodule = get_module(module_item)
+                        if not submodule:
+                            continue
                         if type(submodule) is not ModuleType:
+                            logger.error(
+                                'invalid submodule, skipping: %r', submodule,
+                            )
                             continue
 
                         submodule_name = submodule.__name__
 
                         if submodule_name in tally:
+                            logger.debug(
+                                'skipping %s, already reloaded',
+                                submodule_name,
+                            )
                             continue
+
                         tally.add(submodule_name)
 
                         if not hasattr(submodule, '__file__'):
+                            logger.debug(
+                                'skipping %s, no file path available',
+                                submodule_name,
+                            )
                             continue
                         submodule_file = submodule.__file__
 
                         if PKG_NAME not in submodule_file:
+                            logger.debug(
+                                'skipping %s, not a plugin module: %s',
+                                submodule_name, submodule_file,
+                            )
                             continue
 
                         recursive_reload(
@@ -1069,19 +783,6 @@ class SublimeYcmdListCompleterCommandsCommand(sublime_plugin.TextCommand):
         raise NotImplementedError('unimplemented: show completer commands')
 
 
-def on_change_settings(settings):
-    ''' Callback, triggered when settings are loaded/modified. '''
-    logger.info('loaded settings: %s', settings)
-
-    state = _get_plugin_state()
-
-    if not state:
-        logger.critical('cannot reconfigure plugin, no plugin state exists')
-    else:
-        logger.debug('reconfiguring plugin state')
-        state.configure(settings)
-
-
 DEBUG_LOGGING_DICT_CONFIG = {
     'version': 1,
     'filters': {
@@ -1110,6 +811,19 @@ DEBUG_LOGGING_DICT_CONFIG = {
         }
     }
 }
+
+
+def on_change_settings(settings):
+    ''' Callback, triggered when settings are loaded/modified. '''
+    logger.info('loaded settings: %s', settings)
+
+    state = _get_plugin_state()
+
+    if not state:
+        logger.critical('cannot reconfigure plugin, no plugin state exists')
+    else:
+        logger.debug('reconfiguring plugin state')
+        state.configure(settings)
 
 
 def plugin_loaded():

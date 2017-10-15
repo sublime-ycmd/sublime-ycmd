@@ -65,7 +65,7 @@ except ImportError:
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 LEVELNAME_MAXLEN = 1
-FILENAME_MAXLEN = 12
+PATHNAME_MAXLEN = 12
 LINENO_MAXLEN = 4
 FUNCNAME_MAXLEN = 16
 
@@ -82,9 +82,9 @@ def get_default_messagefmt():
     Returns a record format string for use in logging configuration.
     '''
     return \
-        '[%%(asctime)s] %%(levelname)%ds %%(filename)%ds:%%(lineno)-%dd ' \
+        '[%%(asctime)s] %%(levelname)%ds %%(pathname)%ds:%%(lineno)-%dd ' \
         '%%(funcName)-%ds %%(message)s' % \
-        (LEVELNAME_MAXLEN, FILENAME_MAXLEN, LINENO_MAXLEN, FUNCNAME_MAXLEN)
+        (LEVELNAME_MAXLEN, PATHNAME_MAXLEN, LINENO_MAXLEN, FUNCNAME_MAXLEN)
 
 
 def get_default_format_props():
@@ -94,7 +94,7 @@ def get_default_format_props():
     '''
     return {
         'levelname': LEVELNAME_MAXLEN,
-        'filename': FILENAME_MAXLEN,
+        'pathname': PATHNAME_MAXLEN,
         # doesn't make sense to truncate ints:
         # 'lineno': LINENO_MAXLEN,
         'funcName': FUNCNAME_MAXLEN,

@@ -29,7 +29,53 @@
   // entries in the blacklist have higher priority than those in the whitelist
   "ycmd_language_blacklist": [],
 
+  // ycmd/plugin language mapping
+  // the plugin will use the active scope to determine the filetype/language
+  // unfortunately, the syntax file may not refer to the language by the same
+  // name that ycmd refers to the language (ycmd uses vim-based filetypes)
+  // this mapping is used to translate the filetype extracted from the syntax
+  // file to the filetype expected by ycmd
+  // if semantic completion does not work, but identifiers are extracted and
+  // returned in the completions, it's likely due to this mismatch
+  // entries can be added to this mapping to help ensure that the filetype is
+  // converted to a form that ycmd expects it in
+  "ycmd_language_filetype": {
+    "c++": "cpp",
+    "js": "javascript",
+  },
+
+  // ycmd logging configurations
+  // generally only useful for debugging issues in ycmd itself (e.g. missing a
+  // semantic completer, or shutting down unexpectedly)
+  //
+  // the log level should be one of:
+  //    null, "debug", "info", "warning", "error", or "critical"
+  //
+  // the log file can be specified as:
+  //    null    - no log files kept, but process output is spooled
+  //    false   - no log files kept, stdout and stderr explicitly closed
+  //    true    - temporary files used for stdout and stderr
+  // not yet supported:
+  //    "path"  - file at "path" appended to with stdout and stderr
+  // the following template variables are also not yet supported:
+  //    %(tempdir)s   - temporary file directory  (e.g. "/tmp")
+  //    %(projdir)s   - path to project directory (e.g. "/home/user/project")
+  //    %(projname)s  - project directory name    (e.g. "project")
+  //
+  // the log files created by ycmd may also be retained after the server exits
+  // by default, ycmd will delete the log files when it exits
+  // this setting has no effect if the log file parameter is null or false
+  "ycmd_log_level": null,
+  "ycmd_log_file": null,
+  "ycmd_keep_logs": false,
+
   // plugin-specific settings
+
+  // number of background threads to use for processing events
+  // use 0 to have the plugin automatically decide based on the number of cpu
+  // cores on the machine (cpu count * 5)
+  // must be at least 1, but having more should smooth out slower operations
+  "sublime_ycmd_background_threads": 0,
 
   // logging configuration
   // the user-configurable settings here are merged into the default dictionary
@@ -44,38 +90,62 @@
   // these are the base/default settings for logging
   // do not override this, use "sublime_ycmd_logging_dictconfig_overrides"
   "sublime_ycmd_logging_dictconfig_base": {
+    // version must be 1, likely won't load if it's anything else
     "version": 1,
+
     "filters": {
-      // default filter - enables warnings, errors and critical messages
+      // catch-all default filter - warnings, errors and critical messages
+      // do not override this, it only affects the startup behaviour
+      // configure the "handlers" and "loggers" instead
       "": {
         "level": "WARNING",
       }
     },
+
     "handlers": {
       // default handler - streams to stderr
       "default": {
+        // configurable level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+        "level": "WARNING",
+
+        // should not need to override this, but can be overriden
+        // must restart plugin to apply changes
         "class": "logging.StreamHandler",
         "formatter": "default",
-        "level": "DEBUG",
         "stream": "ext://sys.stderr",
       }
     },
+
     "formatters": {
       // default formatter - truncates long module and function names
+      // should not need to override this, add other entries instead
       "default": {
         "()": "lib.util.log.get_smart_truncate_formatter",
+
         // "fmt": "whatever format here",
         // "datefmt": "whatever date/timestamp format here",
         // "props": {"fieldname": maxlen, ...}
+        // e.g. "props": {"funcName": 4}
       }
     },
+
     "loggers": {
       // all loggers are namespaced in "sublime-ycmd", so this is the root:
       "sublime-ycmd": {
+        // configurable level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+        // keep in mind that the handler uses its own level, so consider
+        // making changes to "handlers.default.level" instead
         "level": "DEBUG",
         "handlers": ["default"],
         "propagate": false,
-      }
+      },
+
+      // specific submodules can be silenced:
+      // "sublime-ycmd.lib.subl": {
+      //   "level": "WARNING",
+      //   "handlers": ["default"],
+      //   "propagate": false,
+      // }
     }
-  },
+  }
 }
