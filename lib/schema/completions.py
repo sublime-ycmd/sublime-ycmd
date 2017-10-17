@@ -59,6 +59,37 @@ class Completions(object):
         )
 
 
+class Diagnostics(object):
+    '''
+    Wrapper around the diagnostics/errors received from ycmd completions.
+
+    This class also contains diagnostics and/or errors that are included in the
+    response of a completion request. These will indicate potential issues in
+    ycmd (e.g. no flags available for clang completion), or potential issues in
+    the code itself (e.g. warnings, syntax issues).
+
+    TODO : Type checking.
+    TODO : Classes for the diagnostics and errors.
+    '''
+
+    def __init__(self, diagnostics=None):
+        self._diagnostics = diagnostics
+
+    def __str__(self):
+        if not self._diagnostics:
+            return '[]'
+        return '[ %s ]' % (
+            ', '.join('%s' % (str(c)) for c in self._diagnostics)
+        )
+
+    def __repr__(self):
+        if not self._diagnostics:
+            return '[]'
+        return '[ %s ]' % (
+            ', '.join('%r' % (c) for c in self._diagnostics)
+        )
+
+
 class CompletionOption(object):
     '''
     Wrapper around individual json entries received from ycmd completions.
@@ -107,14 +138,14 @@ class CompletionOption(object):
                 if shortdesc is not None:
                     return shortdesc
 
-        # TODO : This is way too noisy. Maybe just log it once?
-        logger.warning(
-            'unknown completion option type, cannot generate '
-            'description for option, menu info: %s, %r',
-            self.text(), menu_info,
-        )
+        # TODO : Log this once, or it'll be way too noisy.
+        # logger.warning(
+        #     'unknown completion option type, cannot generate '
+        #     'description for option, menu info: %s, %r',
+        #     self.text(), menu_info,
+        # )
 
-        return 'unknown'
+        return '?'
 
     def text(self):
         '''
@@ -151,6 +182,69 @@ class CompletionOption(object):
         return file_type in self._file_types
 
 
+class DiagnosticError(object):
+
+    def __init__(self, exception_type=None, message=None, traceback=None,
+                 file_types=None):
+        self._exception_type = exception_type
+        self._message = message
+        self._traceback = traceback
+        self._file_types = file_types
+
+    def __repr__(self):
+        repr_params = {
+            'exception_type': self._exception_type,
+            'message': self._message,
+            'traceback': self._traceback,
+        }
+        if self._file_types:
+            repr_params['file_types'] = self._file_types
+        return '<DiagnosticError %r>' % (repr_params)
+
+
+def _parse_json_response(json, ignore_errors=False):
+    if not isinstance(json, (str, bytes, dict)):
+        raise TypeError('json must be a str or dict: %r' % (json))
+
+    if isinstance(json, (str, bytes)):
+        logger.debug('parsing json string into a dict')
+        parsed_json = json_parse(json)
+    else:
+        parsed_json = json.copy()
+
+    assert isinstance(parsed_json, dict), \
+        '[internal] parsed json is not a dict: %r' % (parsed_json)
+
+    # TODO : Use a concrete class for type checking.
+    def _is_error_list(errors):
+        if not isinstance(errors, list):
+            return False
+        return all(map(
+            lambda e: isinstance(e, dict), errors
+        ))
+
+    # TODO : Use a concrete class for type checking.
+    def _is_completions(completions):
+        if not isinstance(completions, list):
+            return False
+        return all(map(
+            lambda c: isinstance(c, dict), completions
+        ))
+
+    if not ignore_errors:
+        # check errors
+        if 'errors' not in parsed_json or \
+                not _is_error_list(parsed_json['errors']):
+            raise ValueError('json is missing "errors" list')
+
+    if 'completions' not in parsed_json or \
+            not _is_completions(parsed_json['completions']):
+        raise ValueError('json is missing "completions" list')
+
+    logger.debug('successfully parsed and verified json response')
+    return parsed_json
+
+
 def _parse_completion_option(node, file_types=None):
     '''
     Parses a single item in the completions list at `node` into an
@@ -165,8 +259,8 @@ def _parse_completion_option(node, file_types=None):
         isinstance(file_types, (tuple, list)), \
         'file types must be a list: %r' % (file_types)
 
-    menu_info = node['extra_menu_info']
-    insertion_text = node['insertion_text']
+    menu_info = node.get('extra_menu_info', None)
+    insertion_text = node.get('insertion_text', None)
     extra_data = node.get('extra_data', None)
     detailed_info = node.get('detailed_info', None)
 
@@ -187,52 +281,83 @@ def parse_completions(json, request_parameters=None):
     depending on the syntax of the file. For example, this will attempt to
     normalize differences in the way ycmd displays functions.
     '''
-    assert isinstance(json, (str, bytes, dict)), \
-        'json must be a dict: %r' % (json)
-    assert request_parameters is None or \
-        isinstance(request_parameters, RequestParameters), \
-        'request parameters must be RequestParameters: %r' % \
-        (request_parameters)
+    json = _parse_json_response(json)
+    if request_parameters is not None and \
+            not isinstance(request_parameters, RequestParameters):
+        raise TypeError(
+            'request parameters must be RequestParameters: %r' %
+            (request_parameters)
+        )
 
-    if isinstance(json, (str, bytes)):
-        logger.debug('parsing json string into a dict')
-        json = json_parse(json)
-
-    if 'errors' not in json or not isinstance(json['errors'], list):
-        raise TypeError('json is missing "errors" list')
-
-    def _is_completions(completions):
-        if not isinstance(completions, list):
-            return False
-        return all(map(
-            lambda c: isinstance(c, dict), completions
-        ))
-
-    if 'completions' not in json or not _is_completions(json['completions']):
-        raise TypeError('json is missing "completions" list')
-
-    # TODO : Type validation. The classes above should be doing the validation.
-    json_errors = json['errors']
     json_completions = json['completions']
     json_start_column = json['completion_start_column']
-
-    if json_errors:
-        raise NotImplementedError('unimplemented: parse errors')
 
     file_types = request_parameters.file_types if request_parameters else None
     assert file_types is None or isinstance(file_types, (tuple, list)), \
         '[internal] file types is not a list: %r' % (file_types)
 
-    completion_options = list(map(
-        lambda c: _parse_completion_option(c, file_types=file_types),
-        json_completions
-    ))
+    completion_options = list(
+        _parse_completion_option(o) for o in json_completions
+    )
     # just assume it's an int
     start_column = json_start_column
 
     return Completions(
         completion_options=completion_options, start_column=start_column,
     )
+
+
+def _parse_diagnostic(node, file_types=None):
+    assert isinstance(node, dict), \
+        'diagnostic node must be a dict: %r' % (node)
+    assert file_types is None or \
+        isinstance(file_types, (tuple, list)), \
+        'file types must be a list: %r' % (file_types)
+
+    message = node.get('message', None)
+    exc = node.get('exception', None)
+    exception_type = exc.get('TYPE') if exc else None
+    traceback = node.get('traceback', None)
+
+    if exception_type:
+        return DiagnosticError(
+            exception_type=exception_type,
+            message=message, traceback=traceback,
+        )
+
+    raise NotImplementedError('unimplemented: diagnostic warnings')
+
+
+def parse_diagnostics(json, request_parameters=None):
+    '''
+    Parses a `json` response from ycmd and extracts `Diagnostics` from it.
+    Similar to `parse_completions`, the input json needs to be in a specific
+    format, or the diagnostics will not be found.
+    If no errors or diagnostics are in the response, this will return `None`.
+    '''
+    json = _parse_json_response(json, ignore_errors=False)
+    if request_parameters is not None and \
+            not isinstance(request_parameters, RequestParameters):
+        raise TypeError(
+            'request parameters must be RequestParameters: %r' %
+            (request_parameters)
+        )
+
+    json_errors = json.get('errors', [])
+
+    file_types = request_parameters.file_types if request_parameters else None
+    assert file_types is None or isinstance(file_types, (tuple, list)), \
+        '[internal] file types is not a list: %r' % (file_types)
+
+    if not json_errors:
+        logger.debug('no errors or diagnostics to report')
+        return Diagnostics(diagnostics=None)
+
+    diagnostics = list(
+        _parse_diagnostic(m, file_types=file_types) for m in json_errors
+    )
+
+    return Diagnostics(diagnostics=diagnostics)
 
 
 '''

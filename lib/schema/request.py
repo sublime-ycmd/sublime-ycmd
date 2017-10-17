@@ -31,13 +31,14 @@ class RequestParameters(object):
     '''
 
     def __init__(self, file_path=None, file_contents=None, file_types=None,
-                 line_num=None, column_num=None):
-        # pylint wants attributes in here, so copy-paste self.reset():
+                 line_num=None, column_num=None, force_semantic=None):
+        # copy-paste of reset:
         self._file_path = None
         self._file_contents = None
         self._file_types = None
         self._line_num = None
         self._column_num = None
+        self._force_semantic = None
         self._extra_params = {}
 
         self.file_path = file_path
@@ -45,6 +46,7 @@ class RequestParameters(object):
         self.file_types = file_types
         self.line_num = line_num
         self.column_num = column_num
+        self.force_semantic = force_semantic
 
     def reset(self):
         ''' Deletes all stored parameters. '''
@@ -53,6 +55,7 @@ class RequestParameters(object):
         self._file_types = None
         self._line_num = None
         self._column_num = None
+        self._force_semantic = None
         self._extra_params = {}
 
     def to_json(self):
@@ -68,6 +71,7 @@ class RequestParameters(object):
         line_num = self.line_num
         column_num = self.column_num
         extra_params = self._extra_params
+        force_semantic = self._force_semantic
 
         # validate
         if not file_path:
@@ -97,6 +101,15 @@ class RequestParameters(object):
         if not isinstance(column_num, int):
             raise TypeError('column num must be an int: %r' % (column_num))
 
+        optional_params = {}
+        if force_semantic is not None:
+            if not isinstance(force_semantic, bool):
+                raise TypeError(
+                    'force-semantic must be a bool: %r' % (force_semantic)
+                )
+
+            optional_params['force_semantic'] = force_semantic
+
         if extra_params is None:
             extra_params = {}
         if not isinstance(extra_params, dict):
@@ -116,6 +129,7 @@ class RequestParameters(object):
             'line_num': line_num,
             'column_num': column_num,
         }
+        json_params.update(optional_params)
         json_params.update(extra_params)
 
         return json_params
@@ -129,7 +143,7 @@ class RequestParameters(object):
 
     @file_path.setter
     def file_path(self, file_path):
-        if not isinstance(file_path, str):
+        if file_path is not None and not isinstance(file_path, str):
             raise TypeError
         self._file_path = file_path
 
@@ -142,7 +156,7 @@ class RequestParameters(object):
 
     @file_contents.setter
     def file_contents(self, file_contents):
-        if not isinstance(file_contents, str):
+        if file_contents is not None and not isinstance(file_contents, str):
             raise TypeError
         self._file_contents = file_contents
 
@@ -157,7 +171,8 @@ class RequestParameters(object):
     def file_types(self, file_types):
         if isinstance(file_types, str):
             file_types = [file_types]
-        if not isinstance(file_types, (tuple, list)):
+        if file_types is not None and \
+                not isinstance(file_types, (tuple, list)):
             raise TypeError
         # create a shallow copy
         self._file_types = list(file_types)
@@ -171,7 +186,7 @@ class RequestParameters(object):
 
     @line_num.setter
     def line_num(self, line_num):
-        if not isinstance(line_num, int):
+        if line_num is not None and not isinstance(line_num, int):
             raise TypeError
         if line_num <= 0:
             raise ValueError
@@ -186,11 +201,21 @@ class RequestParameters(object):
 
     @column_num.setter
     def column_num(self, column_num):
-        if not isinstance(column_num, int):
+        if column_num is not None and not isinstance(column_num, int):
             raise TypeError
         if column_num <= 0:
             raise ValueError
         self._column_num = column_num
+
+    @property
+    def force_semantic(self):
+        return self._force_semantic
+
+    @force_semantic.setter
+    def force_semantic(self, force_semantic):
+        if force_semantic is not None and not isinstance(force_semantic, bool):
+            raise TypeError
+        self._force_semantic = force_semantic
 
     def __getitem__(self, key):
         ''' Retrieves `key` from the extra parameters. '''

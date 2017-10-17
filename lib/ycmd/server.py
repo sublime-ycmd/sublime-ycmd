@@ -23,7 +23,10 @@ import os
 import threading
 
 from lib.process import Process
-from lib.schema.completions import parse_completions
+from lib.schema.completions import (
+    parse_completions,
+    parse_diagnostics,
+)
 from lib.schema.request import RequestParameters
 from lib.util.format import (
     json_serialize,
@@ -692,8 +695,19 @@ class Server(object):
             'received completion results: %s', truncate(completion_data),
         )
 
+        # TODO : Handle exceptions for completions and diagnostics.
         completions = parse_completions(completion_data, request_params)
         self._logger.debug('parsed completions: %r', completions)
+
+        try:
+            diagnostics = parse_diagnostics(completion_data, request_params)
+        except Exception as e:
+            self._logger.warning(
+                'failed to extract diagnostics: %r', e,
+            )
+            diagnostics = None
+
+        self._logger.debug('parsed diagnostics: %r', diagnostics)
 
         return completions
 
