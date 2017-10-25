@@ -13,7 +13,7 @@ annoying. In that case, this class is able to fill in default values if they
 are not filled in by the time it gets serialized to json. Setting parameters
 will also automatically validate that they are the correct type.
 
-TODO :
+TODO : Add handler-specific checks, like additional required parameters.
 Certain handlers use additional parameters, e.g. event notifications require
 the event type as part of the request body. These parameters can also get
 checked when specifying the target handler.

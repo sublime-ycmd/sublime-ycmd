@@ -29,6 +29,7 @@ from lib.subl.settings import (
 )
 from lib.subl.view import (
     get_path_for_view,
+    get_file_types,
 )
 from lib.ycmd.start import StartupParameters
 
@@ -624,7 +625,16 @@ class SublimeYcmdListServersCommand(sublime_plugin.TextCommand):
             ], on_select_empty)
             return
 
-        raise NotImplementedError('unimplemented: display servers')
+        panel_options = [
+            [server.label or '', server.pretty_str()] for server in servers
+        ]
+
+        def on_select_server(selection_index):
+            # do nothing for now
+            # in the future, this may be used for server management as well
+            pass
+
+        window.show_quick_panel(panel_options, on_select_server)
 
     def description(self):
         return 'list ycmd servers'
@@ -653,12 +663,21 @@ class SublimeYcmdShowViewInfo(sublime_plugin.TextCommand):
         if not view_working_directory:
             view_working_directory = 'none'
 
+        view_file_types = get_file_types(view)
+        if not view_file_types:
+            view_file_types = []
+        if hasattr(view_file_types, '__iter__'):
+            view_file_types = ', '.join(view_file_types)
+        else:
+            view_file_types = str(view_file_types)
+
         def on_select_info(selection_index):
             pass
 
         window.show_quick_panel([
             ['Server', server_desc],
             ['Directory', view_working_directory],
+            ['Type', view_file_types],
         ], on_select_info)
 
 
@@ -683,93 +702,6 @@ class SublimeYcmdStartServer(sublime_plugin.TextCommand):
         window.show_quick_panel([
             ['Server', server.pretty_str()],
         ], on_select_server)
-
-
-class SublimeYcmdReloadPlugin(sublime_plugin.TextCommand):
-    def run(self, edit):
-        def defer_reload():
-            try:
-                from imp import reload
-                from types import ModuleType
-            except ImportError:
-                logger.error('failed to reload plugin: no reload method found')
-                return
-
-            PKG_NAME = 'sublime-ycmd'
-            if PKG_NAME in sys.modules:
-                pkg_module = sys.modules[PKG_NAME]
-
-                def get_module(current_module=pkg_module):
-                    if type(current_module) is ModuleType:
-                        return current_module
-
-                    module_name = getattr(current_module, '__module__', None)
-                    if not module_name:
-                        return None
-
-                    if isinstance(module_name, str):
-                        return sys.modules.get(module_name, None)
-                    return None
-
-                def recursive_reload(current_module=pkg_module, tally=None):
-                    # type: (ModuleType, set) -> None
-                    if tally is None:
-                        tally = set()
-
-                    logger.info('reloading %s', current_module.__name__)
-                    reload(current_module)
-
-                    for module_local_name in dir(current_module):
-                        module_item = getattr(
-                            current_module, module_local_name
-                        )
-                        submodule = get_module(module_item)
-                        if not submodule:
-                            continue
-                        if type(submodule) is not ModuleType:
-                            logger.error(
-                                'invalid submodule, skipping: %r', submodule,
-                            )
-                            continue
-
-                        submodule_name = submodule.__name__
-
-                        if submodule_name in tally:
-                            logger.debug(
-                                'skipping %s, already reloaded',
-                                submodule_name,
-                            )
-                            continue
-
-                        tally.add(submodule_name)
-
-                        if not hasattr(submodule, '__file__'):
-                            logger.debug(
-                                'skipping %s, no file path available',
-                                submodule_name,
-                            )
-                            continue
-                        submodule_file = submodule.__file__
-
-                        if PKG_NAME not in submodule_file:
-                            logger.debug(
-                                'skipping %s, not a plugin module: %s',
-                                submodule_name, submodule_file,
-                            )
-                            continue
-
-                        recursive_reload(
-                            submodule, tally=tally,
-                        )
-
-                try:
-                    plugin_unloaded()
-                except Exception as e:
-                    logger.warning('failed to unload, ignoring: %s', e)
-                recursive_reload()
-                plugin_loaded()
-
-        sublime.set_timeout(defer_reload, 0)
 
 
 class SublimeYcmdListCompleterCommandsCommand(sublime_plugin.TextCommand):
