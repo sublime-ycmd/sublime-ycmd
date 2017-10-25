@@ -101,8 +101,6 @@ class SublimeYcmdState(object):
         if logging_dictconfig:
             configure_logging(logging_dictconfig)
 
-        # TODO : Use `_requires_ycmd_restart` and `_requires_task_pool_restart`
-        #        to reset only what's necessary.
         if self._requires_ycmd_restart(settings):
             logger.debug(
                 'shutting down existing ycmd servers, '
@@ -123,8 +121,6 @@ class SublimeYcmdState(object):
             server_idle_suicide_seconds=None,
             max_server_wait_time_seconds=None,
         )
-        # XXX : Somehow get the log parameters in `settings` into the startup
-        #       parameters used by the server manager.
         logger.info(
             'new servers will start with parameters: %s', startup_parameters,
         )
@@ -151,6 +147,8 @@ class SublimeYcmdState(object):
         notification is sent to the server to indicate that the view is open
         in the editor (and any unsaved buffer data is sent over for additional
         parsing).
+
+        NOTE : This does not respect the language whitelist/blacklist.
         '''
         state = _get_plugin_state()
         if not state:
@@ -209,6 +207,8 @@ class SublimeYcmdState(object):
         unloaded (closed, or switched out of). This allows the server to
         release resources for the buffer, since it won't need to handle events
         on it until it is re-activated.
+
+        NOTE : This does not respect the language whitelist/blacklist.
         '''
         state = _get_plugin_state()
         if not state:
@@ -305,6 +305,11 @@ class SublimeYcmdState(object):
             # least the identifiers will be handy for the next time
             self.activate_view(view)
 
+        # apply any view/server-specific settings:
+        if self._settings is not None:
+            force_semantic = self._settings.ycmd_force_semantic_completion
+            request_params.force_semantic = force_semantic
+
         logger.debug('sending completion request for view')
         try:
             # NOTE : This call blocks!!
@@ -389,7 +394,7 @@ class SublimeYcmdState(object):
 
         return has_same_task_pool_settings(self._settings, settings)
 
-    def _enabled_for_scopes(self, view, locations):
+    def enabled_for_scopes(self, view, locations):
         '''
         Returns true if completions should be performed at the scopes contained
         in `locations`. This will apply the language whitelist and blacklist
@@ -554,9 +559,13 @@ class SublimeYcmdCompleter(sublime_plugin.EventListener):
 
         completion_options = None
         try:
-            # TODO : Check if enabled for scopes at `locations`.
-            # TODO : Use `locations` instead of the cursor position.
-            completion_options = state.completions_for_view(view)
+            if state.enabled_for_scopes(view, locations):
+                completion_options = state.completions_for_view(view)
+            else:
+                logger.debug(
+                    'completions are not enabled for that language/scope, '
+                    'not requesting completions from ycmd'
+                )
         except Exception as e:
             logger.debug('failed to get completions: %s', e, exc_info=e)
 

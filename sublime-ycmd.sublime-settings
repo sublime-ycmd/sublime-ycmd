@@ -19,8 +19,8 @@
   // if not set (or if empty), the plugin will activate for all files
   // in either case, the language blacklist will override these selections
   "ycmd_language_whitelist": [
+    "source.c",
     "source.c++",
-    "source.python",
   ],
 
   // ycmd/plugin language blacklist
@@ -68,6 +68,15 @@
   "ycmd_log_level": null,
   "ycmd_log_file": null,
   "ycmd_keep_logs": false,
+
+  // ycmd semantic completer configuration
+  // can be enabled globally (in the user settings), per-project (in the
+  // project file), or per-syntax (in the syntax-specific settings)
+  // the semantic completers are generally slower, so ycmd will automatically
+  // avoid using it for things like variable names
+  // if the semantic completer is fast enough, this can be enabled to force
+  // ycmd to use the semantic completer for all completion requests
+  "ycmd_force_semantic_completion": false,
 
   // plugin-specific settings
 

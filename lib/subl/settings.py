@@ -54,6 +54,8 @@ class Settings(object):
         self._ycmd_log_file = None
         self._ycmd_keep_logs = False
 
+        self._ycmd_force_semantic_completion = False
+
         self._sublime_ycmd_background_threads = None
 
         self._sublime_ycmd_logging_dictconfig_overrides = {}
@@ -87,6 +89,9 @@ class Settings(object):
         self._ycmd_log_level = settings.get('ycmd_log_level', None)
         self._ycmd_log_file = settings.get('ycmd_log_file', None)
         self._ycmd_keep_logs = settings.get('ycmd_keep_logs', False)
+
+        self._ycmd_force_semantic_completion = \
+            settings.get('ycmd_force_semantic_completion', False)
 
         self._sublime_ycmd_background_threads = \
             settings.get('sublime_ycmd_background_threads', None)
@@ -240,6 +245,16 @@ class Settings(object):
         if self._ycmd_keep_logs is None:
             return False
         return self._ycmd_keep_logs
+
+    @property
+    def ycmd_force_semantic_completion(self):
+        '''
+        Returns whether or not semantic completion should be forced.
+        This will be a boolean. If unset, this returns a default of `False`.
+        '''
+        if self._ycmd_force_semantic_completion is None:
+            return False
+        return self._ycmd_force_semantic_completion
 
     @property
     def sublime_ycmd_background_threads(self):

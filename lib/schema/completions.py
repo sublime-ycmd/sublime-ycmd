@@ -3,6 +3,8 @@
 '''
 lib/schema/completions.py
 Schema definition for responses from completion requests.
+
+TODO : Rename these. The naming scheme makes no sense.
 '''
 
 import logging
@@ -11,6 +13,31 @@ from lib.schema.request import RequestParameters
 from lib.util.format import json_parse
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
+
+
+class CompletionResponse(object):
+    '''
+    Wrapper around the json response received from ycmd completions.
+    Contains both the completions and the diagnostics.
+    '''
+
+    def __init__(self, completions=None, diagnostics=None):
+        self._completions = completions
+        self._diagnostics = diagnostics
+
+    @property
+    def completions(self):
+        return self._completions
+
+    @property
+    def diagnostics(self):
+        return self._diagnostics
+
+    def __repr__(self):
+        return '%s({%r})' % ('CompletionResponse', {
+            'completions': self._completions,
+            'diagnostics': self._diagnostics,
+        })
 
 
 class Completions(object):
@@ -241,7 +268,6 @@ def _parse_json_response(json, ignore_errors=False):
             not _is_completions(parsed_json['completions']):
         raise ValueError('json is missing "completions" list')
 
-    logger.debug('successfully parsed and verified json response')
     return parsed_json
 
 
@@ -271,7 +297,7 @@ def _parse_completion_option(node, file_types=None):
     )
 
 
-def parse_completions(json, request_parameters=None):
+def parse_compoptions(json, request_parameters=None):
     '''
     Parses a `json` response from ycmd into an `Completions` instance.
     This expects a certain format in the input json, or it won't be able to
@@ -281,7 +307,7 @@ def parse_completions(json, request_parameters=None):
     depending on the syntax of the file. For example, this will attempt to
     normalize differences in the way ycmd displays functions.
     '''
-    json = _parse_json_response(json)
+    json = _parse_json_response(json, ignore_errors=True)
     if request_parameters is not None and \
             not isinstance(request_parameters, RequestParameters):
         raise TypeError(
@@ -297,7 +323,8 @@ def parse_completions(json, request_parameters=None):
         '[internal] file types is not a list: %r' % (file_types)
 
     completion_options = list(
-        _parse_completion_option(o) for o in json_completions
+        _parse_completion_option(o, file_types=file_types)
+        for o in json_completions
     )
     # just assume it's an int
     start_column = json_start_column
@@ -358,6 +385,31 @@ def parse_diagnostics(json, request_parameters=None):
     )
 
     return Diagnostics(diagnostics=diagnostics)
+
+
+def parse_completions(json, request_parameters=None):
+    '''
+    Wrapper around `parse_compoptions` and `parse_diagnostics`. Uses both to
+    generate and return a `CompletionResponse`.
+    '''
+
+    def _attempt_parse(parser, *args, **kwargs):
+        try:
+            return parser(*args, **kwargs)
+        except ValueError as e:
+            logger.warning('response has unexpected format: %r', e)
+        except NotImplementedError as e:
+            logger.warning('unhandled response format: %r', e)
+        except Exception as e:
+            logger.error('error while parsing response: %r', e)
+        return None
+
+    completions = _attempt_parse(parse_compoptions, json, request_parameters)
+    diagnostics = _attempt_parse(parse_diagnostics, json, request_parameters)
+
+    return CompletionResponse(
+        completions=completions, diagnostics=diagnostics,
+    )
 
 
 '''

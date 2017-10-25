@@ -3,6 +3,8 @@
 '''
 lib/util/log.py
 Contains additional logic to help improve logging output.
+
+TODO : Add helper to use a logfile in this project's directory.
 '''
 
 import collections

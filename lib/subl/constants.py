@@ -22,6 +22,9 @@ The "recognized" keys are used for debugging and logging/pretty-printing.
 
 The "server" keys are used for configuring ycmd servers. Changes to these
 settings should trigger a restart on all running ycmd servers.
+
+The "task pool" keys are used for configuring the thread pool. Changes to these
+settings should trigger a task pool restart.
 '''
 SUBLIME_SETTINGS_WATCH_KEY = 'syplugin'
 SUBLIME_SETTINGS_RECOGNIZED_KEYS = [
@@ -34,6 +37,7 @@ SUBLIME_SETTINGS_RECOGNIZED_KEYS = [
     'ycmd_log_level',
     'ycmd_log_file',
     'ycmd_keep_logs',
+    'ycmd_force_semantic_completion',
     'sublime_ycmd_background_threads',
     'sublime_ycmd_logging_dictconfig_overrides',
     'sublime_ycmd_logging_dictconfig_base',

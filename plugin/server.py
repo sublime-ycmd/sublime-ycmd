@@ -190,16 +190,7 @@ class SublimeYcmdServerManager(object):
             server = Server()
             self._servers.add(server)
 
-            server_startup_parameters = self._startup_parameters.copy()
-
-            # XXX : Move "extra" startup parameters to a method.
-            # XXX : Use process handle instead of messing with the parameters.
-            add_log_file_parameters(
-                server_startup_parameters, log_file=self._log_file,
-            )
-
-            server_startup_parameters.working_directory = view_working_dir
-
+            server_startup_parameters = self._generate_startup_parameters(view)
             logger.debug(
                 'using startup parameters: %r', server_startup_parameters,
             )
@@ -476,6 +467,35 @@ class SublimeYcmdServerManager(object):
             del working_directory_map[working_directory_key]
 
         self._servers.remove(server)
+
+    def _generate_startup_parameters(self, view):
+        '''
+        Generates and returns `StartupParameters` derived from the base startup
+        parameters set via `set_startup_parameters` and customized for `view`.
+        '''
+        with self._lock:
+            if not self._startup_parameters:
+                logger.error(
+                    'no server startup parameters have been set, '
+                    'cannot generate ycmd command-line options'
+                )
+                return None
+
+            # create a copy of all necessary data so we can release the lock
+            startup_parameters = self._startup_parameters.copy()
+            log_file = self._log_file
+
+        # now mess with the copy and fill in information from the view
+        add_log_file_parameters(
+            startup_parameters, log_file=log_file,
+        )
+
+        view_working_dir = get_path_for_view(view)
+        if view_working_dir:
+            startup_parameters.working_directory = view_working_dir
+        # else, whatever, we tried
+
+        return startup_parameters
 
     def __contains__(self, view):
         ''' Checks if a server is available for a given `view`. '''
