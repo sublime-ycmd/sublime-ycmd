@@ -1,0 +1,4 @@
+{
+    "install": "messages/install.txt",
+    "1.0.0-beta": "messages/1.0.0-beta.txt"
+}

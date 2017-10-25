@@ -10,26 +10,31 @@ requires a project-specific/global configuration file for ycmd. The easiest
 way to do that is to create a `.ycm_extra_conf.py` in the root of the project
 tree and add the required `FlagsForFile` method in it.
 
-**TODO** YCM docs for `.ycm_extra_conf.py`.
+See the [ycmd README][ycmd-ycm-extra-conf] for more information.
 
 ### Python
-This does not require any special setup. Since ycmd uses Jedi as the python
-semantic completer, it may be necessary to configure things like python version.
+This should not require any special setup, as ycmd will use Jedi to perform
+python semantic completions.
 
-**TODO** Jedi docs for configuration.
+If the python binary used to build and run ycmd is not the same as the python
+binary used in the project/environment, the completions may be slightly off.
+This can be corrected by updating the `"python_binary_path"` variable in the
+ycmd default settings file (`ycmd/ycmd/default_settings.json`).
 
 ### JavaScript
 This requires that ycmd be built with tern completer support. This also requires
 a project-specific configuration file for Tern itself. Create a `.tern-project`
 file in the root of the project and add the necessary configuration there.
 
-**TODO** Tern docs for configuration.
+See the [Tern docs][ternjs-configuration] for more information.
 
 ## Configuration
-**TODO** Configuration options.
+The supported options are listened in the default settings file. See
+`sublime-ycmd.sublime-settings` for more information.
 
-## Logging
-**TODO** Logging configuration file.
+## Issues
+When submitting issues, try to collect log output relating to the problem. This
+includes log output from both the plugin, and from ycmd itself.
 
 ## Tests
 To run the unit-test suite, simply execute `runtests.py`:
@@ -41,9 +46,9 @@ python runtests.py
 The tests are not yet complete. It tests some basic low-level operations, but
 does not test any of the plugin behaviour.
 
-**TODO** Flags for controlling test list and logging.
-
 ## Contributing
-Ensure that unit tests still pass, and that `pylint` does not report issues.
+Ensure that unit tests still pass. If possible, ensure that `pylint` does not
+report issues.
 
-**TODO** Fix code so it actually passes `pylint`...
+[ycmd-ycm-extra-conf]: https://github.com/Valloric/ycmd#ycm_extra_confpy-specification
+[ternjs-configuration]: http://ternjs.net/doc/manual.html#configuration

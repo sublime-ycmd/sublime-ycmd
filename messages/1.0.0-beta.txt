@@ -1,0 +1,4 @@
+sublime-ycmd 1.0.0-beta changelog:
+    - added process management logic to automatically start and monitor ycmd
+    - added view-event listeners to asynchronously notify ycmd
+    - added formatting routines to display completion results
