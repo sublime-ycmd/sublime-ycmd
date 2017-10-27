@@ -16,10 +16,10 @@ import logging
 import queue
 import threading
 
-from lib.task.task import Task
-from lib.task.worker import spawn_worker
-from lib.util.id import generate_id
-from lib.util.sys import get_cpu_count
+from ..task.task import Task
+from ..task.worker import spawn_worker
+from ..util.id import generate_id
+from ..util.sys import get_cpu_count
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 

@@ -11,21 +11,21 @@ import logging
 import os
 import tempfile
 
-from lib.process import (
+from ..process import (
     FileHandles,
     Process,
 )
-from lib.util.fs import (
+from ..util.fs import (
     default_python_binary_path,
     save_json_file,
 )
-from lib.ycmd.constants import (
+from ..ycmd.constants import (
     YCMD_LOG_SPOOL_OUTPUT,
     YCMD_LOG_SPOOL_SIZE,
     YCMD_DEFAULT_SERVER_IDLE_SUICIDE_SECONDS,
     YCMD_DEFAULT_MAX_SERVER_WAIT_TIME_SECONDS,
 )
-from lib.ycmd.settings import (
+from ..ycmd.settings import (
     get_default_settings_path,
     generate_settings_data,
 )

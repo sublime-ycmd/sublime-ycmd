@@ -17,22 +17,22 @@ import logging
 try:
     import sublime
 except ImportError:
-    from lib.subl.dummy import sublime
+    from ..subl.dummy import sublime
 
-from lib.subl.constants import (
+from ..subl.constants import (
     SUBLIME_SETTINGS_FILENAME,
     SUBLIME_SETTINGS_RECOGNIZED_KEYS,
     SUBLIME_SETTINGS_WATCH_KEY,
     SUBLIME_SETTINGS_YCMD_SERVER_KEYS,
     SUBLIME_SETTINGS_TASK_POOL_KEYS,
 )
-from lib.util.dict import merge_dicts
-from lib.util.fs import (
+from ..util.dict import merge_dicts
+from ..util.fs import (
     resolve_binary_path,
     default_python_binary_path,
 )
-from lib.util.sys import get_cpu_count
-from lib.ycmd.settings import get_default_settings_path
+from ..util.sys import get_cpu_count
+from ..ycmd.settings import get_default_settings_path
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 

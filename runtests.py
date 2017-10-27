@@ -13,10 +13,17 @@ import os
 import sys
 import unittest
 
-sys.path.append(os.path.dirname(__file__))  # noqa: E402
+if __name__ == '__main__':
+    # add import path and load with proper absolute imports
+    project_dir = os.path.dirname(__file__)
+    sys.path.append(project_dir)
 
-from cli.args import base_cli_argparser
-from lib.util.log import get_smart_truncate_formatter
+    from cli.args import base_cli_argparser
+    from lib.util.log import get_smart_truncate_formatter
+else:
+    # use relative imports to avoid messing with import paths
+    from .cli.args import base_cli_argparser
+    from .lib.util.log import get_smart_truncate_formatter
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -176,6 +183,7 @@ def main():
     configure_logging(cli_args.log_level, cli_args.log_file)
 
     logger.debug('initialized logger, about to load tests')
+
     project_dir = os.path.dirname(__file__)
     test_suite = unittest.defaultTestLoader.discover(
         'tests', pattern='*.py', top_level_dir=project_dir,

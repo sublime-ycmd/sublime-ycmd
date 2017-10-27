@@ -11,8 +11,8 @@ server process, checking if it's still alive, and shutting it down.
 import logging
 import subprocess
 
-from lib.process.filehandles import FileHandles
-from lib.util.fs import (
+from ..process.filehandles import FileHandles
+from ..util.fs import (
     is_directory,
     is_file,
     resolve_binary_path,

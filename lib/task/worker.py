@@ -17,7 +17,7 @@ import logging
 import threading
 
 # for type annotations only:
-from lib.task.task import Task      # noqa: F401
+from ..task.task import Task    # noqa: F401
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 

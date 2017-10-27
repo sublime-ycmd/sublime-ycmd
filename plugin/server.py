@@ -15,25 +15,25 @@ import threading
 # for type annotations only:
 import concurrent                   # noqa: F401
 
-from lib.subl.view import (
+from ..lib.subl.view import (
     View,
     get_view_id,
     get_path_for_view,
 )
-from lib.task.pool import (
+from ..lib.task.pool import (
     Pool,
     disown_task_pool,
 )
-from lib.util.lock import lock_guard
-from lib.ycmd.server import Server
-from lib.ycmd.start import StartupParameters
+from ..lib.util.lock import lock_guard
+from ..lib.ycmd.server import Server
+from ..lib.ycmd.start import StartupParameters
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 try:
     import sublime
 except ImportError:
-    from lib.subl.dummy import sublime
+    from ..lib.subl.dummy import sublime
 
 
 class SublimeYcmdServerManager(object):

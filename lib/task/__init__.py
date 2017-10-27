@@ -12,9 +12,9 @@ This module is built on primitives from `queue` and `threading`, so it should
 be supported in just about all environments.
 '''
 
-from lib.task.pool import Pool      # noqa
-from lib.task.task import Task      # noqa
-from lib.task.worker import (       # noqa
+from .pool import Pool      # noqa
+from .task import Task      # noqa
+from .worker import (       # noqa
     spawn_worker,
     Worker,
 )

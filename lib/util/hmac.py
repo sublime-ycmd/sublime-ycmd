@@ -12,11 +12,11 @@ import hmac
 import logging
 import os
 
-from lib.util.str import (
+from ..util.str import (
     bytes_to_str,
     str_to_bytes,
 )
-from lib.util.format import (
+from ..util.format import (
     base64_encode,
 )
 

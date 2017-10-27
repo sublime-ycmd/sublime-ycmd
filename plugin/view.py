@@ -12,18 +12,18 @@ project may all share a single ycmd server backend.
 import logging
 import threading
 
-from lib.subl.view import (
+from ..lib.subl.view import (
     View,
     get_view_id,
 )
-from lib.util.lock import lock_guard
+from ..lib.util.lock import lock_guard
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
 try:
     import sublime
 except ImportError:
-    from lib.subl.dummy import sublime
+    from ..lib.subl.dummy import sublime
 
 
 class SublimeYcmdViewManager(object):

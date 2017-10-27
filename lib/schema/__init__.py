@@ -5,8 +5,8 @@ lib/schema
 sublime-ycmd json schema definitions.
 '''
 
-from lib.schema.request import RequestParameters        # noqa
-from lib.schema.completions import (                    # noqa
+from .request import RequestParameters      # noqa
+from .completions import (                  # noqa
     Completions,
     CompletionOption,
 )

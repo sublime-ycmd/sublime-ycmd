@@ -29,7 +29,7 @@
   // entries in the blacklist have higher priority than those in the whitelist
   "ycmd_language_blacklist": [],
 
-  // ycmd/plugin language mapping
+  // ycmd/plugin language mapping - not yet implemented
   // the plugin will use the active scope to determine the filetype/language
   // unfortunately, the syntax file may not refer to the language by the same
   // name that ycmd refers to the language (ycmd uses vim-based filetypes)
@@ -129,7 +129,7 @@
       // default formatter - truncates long module and function names
       // should not need to override this, add other entries instead
       "default": {
-        "()": "lib.util.log.get_smart_truncate_formatter",
+        "()": "ext://sublime-ycmd.lib.util.log.get_smart_truncate_formatter",
 
         // "fmt": "whatever format here",
         // "datefmt": "whatever date/timestamp format here",

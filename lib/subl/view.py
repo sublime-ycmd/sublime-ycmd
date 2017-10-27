@@ -13,21 +13,21 @@ import logging
 try:
     import sublime
 except ImportError:
-    from lib.subl.dummy import sublime
+    from ..subl.dummy import sublime
 
-from lib.schema.request import RequestParameters
-from lib.subl.constants import (
+from ..schema.request import RequestParameters
+from ..subl.constants import (
     SUBLIME_DEFAULT_LANGUAGE_FILETYPE_MAPPING,
     SUBLIME_LANGUAGE_SCOPE_PREFIX,
 )
-from lib.util.fs import (
+from ..util.fs import (
     get_common_ancestor,
     get_directory_name,
     resolve_abspath,
 )
 
 # for type annotations only:
-from lib.ycmd.server import Server   # noqa: F401
+from ..ycmd.server import Server   # noqa: F401
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -535,14 +535,28 @@ def get_file_types(view, scope_position=0):
         lambda s: s[len(SUBLIME_LANGUAGE_SCOPE_PREFIX):], source_scope_names
     ))
 
+    def _rtrim_source_specialization(source_name):
+        if source_name and '.' in source_name:
+            # e.g. 'source.json.sublime' -> 'json.sublime'
+            #      grab only the first part, and drop the rest
+            source_name_components = source_name.split('.')
+            return source_name_components[0]
+
+        # unknown... return as-is
+        return source_name
+
+    source_names_trimmed = list(map(
+        _rtrim_source_specialization, source_names
+    ))
+
     # TODO : Use `Settings` to get the scope mapping dynamically.
     source_types = list(map(
         lambda s: SUBLIME_DEFAULT_LANGUAGE_FILETYPE_MAPPING.get(s, s),
-        source_names
+        source_names_trimmed
     ))
     logger.debug(
         'extracted source scope names: %s -> %s -> %s',
-        source_scope_names, source_names, source_types,
+        source_scope_names, source_names_trimmed, source_types,
     )
 
     return source_types

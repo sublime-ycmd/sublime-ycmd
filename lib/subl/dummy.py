@@ -14,8 +14,8 @@ try:
     import sublime
     import sublime_plugin
 except ImportError:
-    from lib.subl.dummy import sublime
-    from lib.subl.dummy import sublime_plugin
+    from .lib.subl.dummy import sublime
+    from .lib.subl.dummy import sublime_plugin
 ```
 '''
 

@@ -8,13 +8,13 @@ Utility functions for ycmd settings.
 import logging
 import os
 
-from lib.util.format import base64_encode
-from lib.util.fs import (
+from ..util.format import base64_encode
+from ..util.fs import (
     is_directory,
     is_file,
     load_json_file,
 )
-from lib.util.str import bytes_to_str
+from ..util.str import bytes_to_str
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 

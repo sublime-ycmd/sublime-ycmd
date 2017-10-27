@@ -9,8 +9,8 @@ TODO : Rename these. The naming scheme makes no sense.
 
 import logging
 
-from lib.schema.request import RequestParameters
-from lib.util.format import json_parse
+from ..schema.request import RequestParameters
+from ..util.format import json_parse
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 

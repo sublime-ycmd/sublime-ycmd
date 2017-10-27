@@ -22,28 +22,28 @@ import logging
 import os
 import threading
 
-from lib.process import Process
-from lib.schema.completions import parse_completions
-from lib.schema.request import RequestParameters
-from lib.util.format import (
+from ..process import Process
+from ..schema.completions import parse_completions
+from ..schema.request import RequestParameters
+from ..util.format import (
     json_serialize,
     json_parse,
 )
-from lib.util.fs import (
+from ..util.fs import (
     is_file,
     get_base_name,
 )
-from lib.util.hmac import (
+from ..util.hmac import (
     calculate_hmac,
     new_hmac_secret,
 )
-from lib.util.lock import lock_guard
-from lib.util.str import (
+from ..util.lock import lock_guard
+from ..util.str import (
     str_to_bytes,
     truncate,
 )
-from lib.util.sys import get_unused_port
-from lib.ycmd.constants import (
+from ..util.sys import get_unused_port
+from ..ycmd.constants import (
     YCMD_HMAC_SECRET_LENGTH,
     YCMD_HMAC_HEADER,
     YCMD_HANDLER_SHUTDOWN,
@@ -58,7 +58,7 @@ from lib.ycmd.constants import (
     YCMD_EVENT_INSERT_LEAVE,
     YCMD_EVENT_CURRENT_IDENTIFIER_FINISHED,
 )
-from lib.ycmd.start import (
+from ..ycmd.start import (
     StartupParameters,
     to_startup_parameters,
     write_ycmd_settings_file,

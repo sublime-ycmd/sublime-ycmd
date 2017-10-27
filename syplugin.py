@@ -8,33 +8,30 @@ requests to it.
 
 import logging
 import logging.config
-import os
 import sys
 
-sys.path.append(os.path.dirname(__file__))  # noqa: E402
-
-from cli.args import base_cli_argparser
-from lib.util.log import (
+from .cli.args import base_cli_argparser
+from .lib.util.log import (
     get_smart_truncate_formatter,
 )
-from lib.schema import (
+from .lib.schema import (
     Completions,
     CompletionOption,
 )
-from lib.subl.settings import (
+from .lib.subl.settings import (
     Settings,
     bind_on_change_settings,
     has_same_ycmd_settings,
     has_same_task_pool_settings,
 )
-from lib.subl.view import (
+from .lib.subl.view import (
     get_path_for_view,
     get_file_types,
 )
-from lib.ycmd.start import StartupParameters
+from .lib.ycmd.start import StartupParameters
 
-from plugin.server import SublimeYcmdServerManager
-from plugin.view import SublimeYcmdViewManager
+from .plugin.server import SublimeYcmdServerManager
+from .plugin.view import SublimeYcmdViewManager
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -43,8 +40,8 @@ try:
     import sublime_plugin
     _HAS_LOADED_ST = True
 except ImportError:
-    from lib.subl.dummy import sublime
-    from lib.subl.dummy import sublime_plugin
+    from .lib.subl.dummy import sublime
+    from .lib.subl.dummy import sublime_plugin
     _HAS_LOADED_ST = False
 finally:
     assert isinstance(_HAS_LOADED_ST, bool)
@@ -56,7 +53,10 @@ def configure_logging(dict_config):
     the configuration in the given `dict_config`.
     The dictionary configuration must be compatible with `logging.config`.
     '''
-    logging.config.dictConfig(dict_config)
+    try:
+        logging.config.dictConfig(dict_config)
+    except Exception as e:
+        logger.warning('failed to configure logging: %r', e)
 
 
 class SublimeYcmdState(object):
@@ -448,7 +448,7 @@ class SublimeYcmdState(object):
                 if not is_whitelisted:
                     return False
 
-                is_blacklisted = not check_blacklist or any(map(
+                is_blacklisted = check_blacklist and any(map(
                     lambda scope: view.match_selector(location, scope),
                     language_blacklist
                 ))
@@ -728,20 +728,20 @@ DEBUG_LOGGING_DICT_CONFIG = {
     'version': 1,
     'filters': {
         '': {
-            'level': 'DEBUG',
+            'level': 'WARNING',
         }
     },
     'handlers': {
         'default': {
             'class': 'logging.StreamHandler',
             'formatter': 'default',
-            'level': 'DEBUG',
+            'level': 'WARNING',
             'stream': 'ext://sys.stderr',
         }
     },
     'formatters': {
         'default': {
-            '()': 'lib.util.log.get_smart_truncate_formatter',
+            '()': get_smart_truncate_formatter,
         }
     },
     'loggers': {

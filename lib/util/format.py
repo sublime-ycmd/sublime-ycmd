@@ -10,7 +10,7 @@ import base64
 import json
 import logging
 
-from lib.util.str import (
+from ..util.str import (
     bytes_to_str,
     str_to_bytes,
 )
