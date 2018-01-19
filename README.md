@@ -142,22 +142,14 @@ Use the following plugin settings to collect plugin logs in a separate file:
 
 ```
 {
-  "sublime_ycmd_logging_dictconfig_overrides": {
-    "handlers": { "logfile": {
-      "filename": "/tmp/sublime-ycmd.log",
-      "class": "logging.handlers.RotatingFileHandler",
-      "maxBytes": 1024000,
-      "backupCount": 3
-    } },
-    "loggers": { "sublime-ycmd": {
-      "handlers": ["default", "logfile"]
-    } }
-  }
+  "sublime_ycmd_log_level": "debug",
+  "sublime_ycmd_log_file": "/tmp/sublime-ycmd.log",
 }
 ```
 
-Verbose logs will be written to `"filename"` (`/tmp/sublime-ycmd.log` in this
-example). It's likely that the issue will have related errors in these logs.
+Verbose logs will be appended to `"sublime_ycmd_log_file"`
+(`/tmp/sublime-ycmd.log` in this example). It's likely that the issue will
+have related errors in these logs.
 
 Use the following plugin settings to generate ycmd logs as well:
 

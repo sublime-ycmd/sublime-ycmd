@@ -78,6 +78,7 @@ def load_json_file(path, encoding='utf-8'):
     if not isinstance(encoding, str):
         raise TypeError('encoding must be a str: %r' % (encoding))
 
+    path = resolve_env(path)
     if not is_file(path):
         logger.warning('path does not seem to refer to a valid file: %s', path)
         # but fall through and try anyway
@@ -104,6 +105,22 @@ def save_json_file(fp, data, encoding='utf-8'):
     fp.write(json_bytes)
 
 
+def resolve_env(path):
+    '''
+    Resolves environment components in `path` and returns the result.
+    This will expand things like `'~'`, which need to be expanded.
+    '''
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
+
+    # attempt to expand things like '~/' before proceeding
+    expanded_path = path[:]
+    expanded_path = os.path.expanduser(expanded_path)
+    expanded_path = os.path.expandvars(expanded_path)
+
+    return expanded_path
+
+
 def resolve_abspath(path, start=None):
     '''
     Resolves `path` to an absolute path. If the path is already an absolute
@@ -115,8 +132,7 @@ def resolve_abspath(path, start=None):
         raise TypeError('path must be a str: %r' % (path))
 
     # attempt to expand things like '~/' before proceeding
-    path = os.path.expanduser(path)
-    path = os.path.expandvars(path)
+    path = resolve_env(path)
 
     if os.path.isabs(path):
         logger.debug('path is already absolute: %s', path)

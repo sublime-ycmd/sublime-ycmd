@@ -29,7 +29,6 @@ from ..subl.constants import (
 from ..subl.errors import (
     SettingsError,
 )
-from ..util.dict import merge_dicts
 from ..util.fs import (
     resolve_abspath,
     resolve_binary_path,
@@ -60,10 +59,9 @@ class Settings(object):
 
         self._ycmd_force_semantic_completion = False
 
+        self._sublime_ycmd_log_level = None
+        self._sublime_ycmd_log_file = None
         self._sublime_ycmd_background_threads = None
-
-        self._sublime_ycmd_logging_dictconfig_overrides = {}
-        self._sublime_ycmd_logging_dictconfig_base = {}
 
         if settings is not None:
             self.parse(settings)
@@ -100,13 +98,12 @@ class Settings(object):
         self._ycmd_force_semantic_completion = \
             settings.get('ycmd_force_semantic_completion', False)
 
+        self._sublime_ycmd_log_level = \
+            settings.get('sublime_ycmd_log_level', None)
+        self._sublime_ycmd_log_file = \
+            settings.get('sublime_ycmd_log_file', None)
         self._sublime_ycmd_background_threads = \
             settings.get('sublime_ycmd_background_threads', None)
-
-        self._sublime_ycmd_logging_dictconfig_overrides = \
-            settings.get('sublime_ycmd_logging_dictconfig_overrides', {})
-        self._sublime_ycmd_logging_dictconfig_base = \
-            settings.get('sublime_ycmd_logging_dictconfig_base', {})
 
         try:
             self._normalize()
@@ -121,31 +118,44 @@ class Settings(object):
         This will calculate things like the default settings path based on the
         ycmd root directory, or the python binary based on the system PATH.
         '''
-        if not self._ycmd_root_directory:
-            logger.debug(
-                'no ycmd root directory set, skipping setting normalization'
-            )
-            return
-
-        resolved_ycmd_root_directory = \
-            resolve_abspath(self._ycmd_root_directory)
-        if resolved_ycmd_root_directory != self._ycmd_root_directory:
-            logger.debug(
-                'resolved ycmd root directory: %r -> %r',
-                self._ycmd_root_directory, resolved_ycmd_root_directory,
-            )
-            self._ycmd_root_directory = resolved_ycmd_root_directory
-
-        if not self._ycmd_default_settings_path:
-            ycmd_root_directory = self._ycmd_root_directory
-            if ycmd_root_directory:
-                ycmd_default_settings_path = \
-                    get_default_settings_path(ycmd_root_directory)
+        if self._ycmd_root_directory:
+            # TODO : Make ycmd setting normalization its own helper function.
+            resolved_ycmd_root_directory = \
+                resolve_abspath(self._ycmd_root_directory)
+            if resolved_ycmd_root_directory != self._ycmd_root_directory:
                 logger.debug(
-                    'calculated default settings path from '
-                    'ycmd root directory: %s', ycmd_default_settings_path
+                    'resolved ycmd root directory: %r -> %r',
+                    self._ycmd_root_directory, resolved_ycmd_root_directory,
                 )
-                self._ycmd_default_settings_path = ycmd_default_settings_path
+                self._ycmd_root_directory = resolved_ycmd_root_directory
+
+            if self._ycmd_default_settings_path:
+                # assume that the path is relative to the ycmd root
+                resolved_ycmd_default_settings_path = resolve_abspath(
+                    self._ycmd_default_settings_path,
+                    start=self._ycmd_root_directory,
+                )
+                if resolved_ycmd_default_settings_path != \
+                        self._ycmd_default_settings_path:
+                    logger.debug(
+                        'resolved ycmd default settings path: %r -> %r',
+                        self._ycmd_default_settings_path,
+                        resolved_ycmd_default_settings_path,
+                    )
+                    self._ycmd_default_settings_path = \
+                        resolved_ycmd_default_settings_path
+            else:
+                # calculate default settings path instead
+                ycmd_root_directory = self._ycmd_root_directory
+                if ycmd_root_directory:
+                    ycmd_default_settings_path = \
+                        get_default_settings_path(ycmd_root_directory)
+                    logger.debug(
+                        'calculated default settings path from '
+                        'ycmd root directory: %s', ycmd_default_settings_path
+                    )
+                    self._ycmd_default_settings_path = \
+                        ycmd_default_settings_path
 
         if not self._ycmd_python_binary_path:
             self._ycmd_python_binary_path = default_python_binary_path()
@@ -283,41 +293,30 @@ class Settings(object):
         return self._ycmd_force_semantic_completion
 
     @property
+    def sublime_ycmd_log_level(self):
+        '''
+        Returns the log level for the plugin/client.
+        If set, this will be a string. If unset, this will be `None`, which
+        should silence all log output.
+        '''
+        return self._sublime_ycmd_log_level
+
+    @property
+    def sublime_ycmd_log_file(self):
+        '''
+        Returns the log file to write plugin/client logs to.
+        If set, this will be a string. If unset, this will be `None`, which
+        should output to the console/terminal.
+        '''
+        return self._sublime_ycmd_log_file
+
+    @property
     def sublime_ycmd_background_threads(self):
         '''
         Returns the number of background threads to use for task pools.
         This will be a positive integer.
         '''
         return self._sublime_ycmd_background_threads
-
-    @property
-    def sublime_ycmd_logging_dictconfig_base(self):
-        '''
-        Returns the base logging dictionary configuration for the library.
-        This will be a dictionary, but may be empty.
-        '''
-        return self._sublime_ycmd_logging_dictconfig_base.copy()
-
-    @property
-    def sublime_ycmd_logging_dictconfig_overrides(self):
-        '''
-        Returns the override logging dictionary configuration for the library.
-        This will be a dictionary, but may be empty.
-        '''
-        return self._sublime_ycmd_logging_dictconfig_overrides.copy()
-
-    @property
-    def sublime_ycmd_logging_dictconfig(self):
-        '''
-        Resolves the base and override logging dictionary configuration into
-        a complete configuration for the library.
-        This will be a dictionary, valid for `logging.config.dictConfig`.
-        '''
-        return merge_dicts(
-            {},
-            self.sublime_ycmd_logging_dictconfig_base,
-            self.sublime_ycmd_logging_dictconfig_overrides,
-        )
 
     def __eq__(self, other):
         '''
@@ -438,12 +437,10 @@ def validate_settings(settings):
     ycmd_keep_logs = settings.ycmd_keep_logs
     ycmd_force_semantic_completion = \
         settings.ycmd_force_semantic_completion
+    # sublime_ycmd_log_level = settings.sublime_ycmd_log_level
+    # sublime_ycmd_log_file = settings.sublime_ycmd_log_file
     # sublime_ycmd_background_threads = \
     #     settings.sublime_ycmd_background_threads
-    # sublime_ycmd_logging_dictconfig_overrides = \
-    #     settings.sublime_ycmd_logging_dictconfig_overrides
-    # sublime_ycmd_logging_dictconfig_base = \
-    #     settings.sublime_ycmd_logging_dictconfig_base
 
     # required settings
     if not ycmd_root_directory:

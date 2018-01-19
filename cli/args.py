@@ -10,7 +10,7 @@ import functools
 import logging
 
 
-def loglevel_str_to_enum(levelstr):
+def log_level_str_to_enum(log_level):
     '''
     Maps a log level, in string representation, to its corresponding severity
     enumeration defined in the logging module.
@@ -18,8 +18,20 @@ def loglevel_str_to_enum(levelstr):
     intuitive enough for parsing command-line arguments.
     If the string representation does not map to anything, this returns None.
     '''
-    assert isinstance(levelstr, str), \
-        '[internal] levelstr is not a str: %r' % levelstr
+    logging_enums = [
+        logging.DEBUG,
+        logging.INFO,
+        logging.WARNING,
+        logging.ERROR,
+        logging.CRITICAL,
+    ]
+    if log_level in logging_enums:
+        # already an enum, so return as-is
+        return log_level
+
+    # else, convert from str to enum
+    if not isinstance(log_level, str):
+        raise TypeError('log level must be a str: %r' % (log_level))
 
     # use a dict to perform the mapping - uses lower-case versions of levels
     ll_ste_map = {
@@ -36,10 +48,10 @@ def loglevel_str_to_enum(levelstr):
         'c': logging.CRITICAL
     }
 
-    levelstr_lower = levelstr.lower()
+    log_level_lower = log_level.lower()
 
-    if levelstr_lower in ll_ste_map:
-        return ll_ste_map[levelstr_lower]
+    if log_level_lower in ll_ste_map:
+        return ll_ste_map[log_level_lower]
 
     return None
 
@@ -77,7 +89,7 @@ def base_cli_argparser(**kwargs):
                 # weird... nothing to do though
                 return
 
-            enum_from_str = loglevel_str_to_enum(lastvalue)
+            enum_from_str = log_level_str_to_enum(lastvalue)
             if enum_from_str is None:
                 # Try to parse it as a raw number too
                 try:

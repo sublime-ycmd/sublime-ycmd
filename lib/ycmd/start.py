@@ -347,7 +347,7 @@ def check_startup_parameters(startup_parameters):
         raise RuntimeError('no ycmd default settings path has been set')
 
     logger.debug(
-        'startup parameters seem to be filled in, ',
+        'startup parameters seem to be filled in, '
         'ready to attempt startup: %r', startup_parameters,
     )
 

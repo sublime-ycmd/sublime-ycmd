@@ -38,9 +38,9 @@ SUBLIME_SETTINGS_RECOGNIZED_KEYS = [
     'ycmd_log_file',
     'ycmd_keep_logs',
     'ycmd_force_semantic_completion',
+    'sublime_ycmd_log_level',
+    'sublime_ycmd_log_file',
     'sublime_ycmd_background_threads',
-    'sublime_ycmd_logging_dictconfig_overrides',
-    'sublime_ycmd_logging_dictconfig_base',
 ]
 SUBLIME_SETTINGS_YCMD_SERVER_KEYS = [
     'ycmd_root_directory',

@@ -1,4 +1,7 @@
 {
+  // -----
+  // core settings
+
   // ycmd root directory
   // e.g. ~/.vim/bundle/YouCompleteMe/third_party/ycmd
   //      /usr/local/lib/ycmd
@@ -32,6 +35,31 @@
   // the scope, see Tools -> Developer -> Show Scope Name)
   // entries in the blacklist have higher priority than those in the whitelist
   "ycmd_language_blacklist": [],
+
+  // -----
+  // plugin settings
+
+  // logging configuration
+  //
+  // the log level should be one of:
+  //    null, "debug", "info", "warning", "error", or "critical"
+  //    null    - silence all log output
+  //    "level" - include log output for severity "level" and higher
+  //
+  // the log file should be null or a string:
+  //    null    - write log output to the console
+  //    "path"  - append log output to the file at "path"
+  "sublime_ycmd_log_level": null,
+  "sublime_ycmd_log_file": null,
+
+  // number of background threads to use for processing events
+  // use 0 to have the plugin automatically decide based on the number of cpu
+  // cores on the machine (cpu count * 5)
+  // must be at least 1, but having more should smooth out slower operations
+  "sublime_ycmd_background_threads": 0,
+
+  // -----
+  // ycmd settings
 
   // ycmd/plugin language mapping - not yet implemented
   // the plugin will use the active scope to determine the filetype/language
@@ -81,106 +109,4 @@
   // if the semantic completer is fast enough, this can be enabled to force
   // ycmd to use the semantic completer for all completion requests
   "ycmd_force_semantic_completion": false,
-
-  // plugin-specific settings
-
-  // number of background threads to use for processing events
-  // use 0 to have the plugin automatically decide based on the number of cpu
-  // cores on the machine (cpu count * 5)
-  // must be at least 1, but having more should smooth out slower operations
-  "sublime_ycmd_background_threads": 0,
-
-  // logging configuration
-  // not yet supported: this sets the logging level for the plugin
-  // "sublime_ycmd_log_level": null,
-
-  // for better control over the logging, the entire configuration may be
-  // provided as an object
-  // the user-configurable settings here are merged into the default dictionary
-  // configuration below to generate the final logging dictionary configuration
-  //
-  // just include the portions to override/add to, e.g.:
-  // "sublime_ycmd_logging_dictconfig_overrides": {
-  //   "handlers": { "default": { "level": "DEBUG" } }
-  // }
-  "sublime_ycmd_logging_dictconfig_overrides": {},
-
-  // these are the base/default settings for logging
-  // do not override this, use "sublime_ycmd_logging_dictconfig_overrides"
-  "sublime_ycmd_logging_dictconfig_base": {
-    // version must be 1, likely won't load if it's anything else
-    "version": 1,
-
-    "filters": {
-      // catch-all default filter - warnings, errors and critical messages
-      // do not override this, it only affects the startup behaviour
-      // configure the "handlers" and "loggers" instead
-      "": {
-        "level": "WARNING",
-      }
-    },
-
-    "handlers": {
-      // default handler - streams to stderr
-      "default": {
-        // configurable level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-        "level": "CRITICAL",
-
-        // should not need to override this, but can be overriden
-        // must restart plugin to apply changes
-        "class": "logging.StreamHandler",
-        "formatter": "default",
-        "stream": "ext://sys.stderr",
-      },
-      // file handler - not used by default, but useful for debugging
-      "logfile": {
-        "level": "DEBUG",
-        "class": "logging.NullHandler",
-        "formatter": "full",
-
-        // fill this out in the override to write out a separate log file
-        // "filename": "sublime-ycmd.log",
-
-        // copy these in as well:
-        // "class": "logging.handlers.RotatingFileHandler",
-        // "maxBytes": 1024000,
-        // "backupCount": 3,
-      }
-    },
-
-    "formatters": {
-      // default formatter - truncates long module and function names
-      // should not need to override this, add other entries instead
-      "default": {
-        "()": "ext://sublime-ycmd.lib.util.log.get_smart_truncate_formatter",
-
-        // "fmt": "whatever format here",
-        // "datefmt": "whatever date/timestamp format here",
-        // "props": {"fieldname": maxlen, ...}
-        // e.g. "props": {"funcName": 4}
-      },
-      "full": {
-        "()": "ext://sublime-ycmd.lib.util.log.get_basic_formatter",
-      }
-    },
-
-    "loggers": {
-      // all loggers are namespaced in "sublime-ycmd", so this is the root:
-      "sublime-ycmd": {
-        // configurable level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-        // keep in mind that the handler uses its own level, so consider
-        // making changes to "handlers.default.level" instead
-        "level": "DEBUG",
-        "handlers": ["default"],
-        "propagate": false,
-      },
-
-      // specific submodules can be silenced:
-      // "sublime-ycmd.lib.subl": {
-      //   "level": "WARNING",
-      //   "handlers": ["default"],
-      //   "propagate": false,
-      // }
-    }
-  }
 }

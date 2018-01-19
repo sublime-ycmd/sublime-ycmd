@@ -8,11 +8,14 @@ requests to it.
 
 import logging
 import logging.config
-import sys
 
-from .cli.args import base_cli_argparser
+from .cli.args import (
+    base_cli_argparser,
+    log_level_str_to_enum,
+)
 from .lib.util.log import (
     get_smart_truncate_formatter,
+    get_debug_formatter,
 )
 from .lib.schema import (
     Completions,
@@ -56,16 +59,60 @@ finally:
     assert isinstance(_HAS_LOADED_ST, bool)
 
 
-def configure_logging(dict_config):
+def configure_logging(log_level=None, log_file=None):
     '''
-    Configures the logging module (or plugin-specific root logger) to log with
-    the configuration in the given `dict_config`.
-    The dictionary configuration must be compatible with `logging.config`.
+    Configures the logging module (or plugin-specific root logger) to log at
+    the given `log_level` and write log output to file `log_file`. Formatters,
+    handlers, and filters are added to prettify the logging output.
+    If `log_level` is not provided, logging output will be silenced. Otherwise,
+    it should be one of the logging enums or a string (e.g. 'DEBUG').
+    If `log_file` is not provided, this uses the default logging stream, which
+    should be `sys.stderr`. Otherwise, it should be a string representing the
+    file name to append log output to.
     '''
-    try:
-        logging.config.dictConfig(dict_config)
-    except Exception as e:
-        logger.warning('failed to configure logging: %r', e, exc_info=e)
+    if isinstance(log_level, str):
+        log_level = log_level_str_to_enum(log_level)
+
+    # avoid messing with the root logger
+    # if running under sublime, that would affect all other plugins as well
+    logger_instance = logging.getLogger('sublime-ycmd')
+    if log_level is None:
+        logger_instance.setLevel(logging.NOTSET)
+    else:
+        logger_instance.setLevel(log_level)
+
+    # disable propagate so logging does not go above this module
+    logger_instance.propagate = False
+
+    # create the handler
+    if log_level is None:
+        logger_handler = logging.NullHandler()
+    else:
+        if isinstance(log_file, str):
+            logger_handler = logging.FileHandler(filename=log_file)
+        else:
+            # assume it's a stream
+            logger_handler = logging.StreamHandler(stream=log_file)
+
+    def remove_handlers(logger=logger_instance):
+        if logger.hasHandlers():
+            handlers = list(h for h in logger.handlers)
+            for handler in handlers:
+                logger.removeHandler(handler)
+
+    # remove existing handlers (in case the plugin is reloaded)
+    remove_handlers(logger_instance)
+
+    # create the formatter
+    if log_file is None:
+        logger_formatter = get_smart_truncate_formatter()
+    else:
+        # writing to a file, so don't bother pretty-printing
+        logger_formatter = get_debug_formatter()
+
+    # connect everything up
+    logger_handler.setFormatter(logger_formatter)
+    logger_instance.addHandler(logger_handler)
 
 
 class SublimeYcmdState(object):
@@ -113,9 +160,20 @@ class SublimeYcmdState(object):
             display_plugin_error(e)
             return
 
-        logging_dictconfig = settings.sublime_ycmd_logging_dictconfig
-        if logging_dictconfig:
-            configure_logging(logging_dictconfig)
+        try:
+            configure_logging(
+                log_level=settings.sublime_ycmd_log_level,
+                log_file=settings.sublime_ycmd_log_file,
+            )
+            logger.debug(
+                'successfully reconfigured logging with level, file: %r, %r',
+                settings.sublime_ycmd_log_level,
+                settings.sublime_ycmd_log_file,
+            )
+        except Exception as e:
+            logger.warning(
+                'failed to reconfigure logging, ignoring: %r', e, exc_info=e,
+            )
 
         if self._requires_ycmd_restart(settings):
             logger.debug(
@@ -721,7 +779,6 @@ class SublimeYcmdShowViewInfo(sublime_plugin.TextCommand):
 
         if not window:
             logger.warning('no window, cannot display info')
-            # TODO : Handle this error with the `ui`.
             return
 
         server = state.lookup_server(view)
@@ -763,7 +820,6 @@ class SublimeYcmdStartServer(sublime_plugin.TextCommand):
 
         if not window:
             logger.warning('no window, cannot display info')
-            # TODO : Handle this error with the `ui`.
             return
 
         server = state.server_manager.get_server_for_view(view)
@@ -787,7 +843,6 @@ class SublimeYcmdListCompleterCommandsCommand(sublime_plugin.TextCommand):
 
         if not window:
             logger.warning('no window, cannot display info')
-            # TODO : Handle this error with the `ui`.
             return
 
         server = state.server_manager.get_server_for_view(view)
@@ -795,36 +850,6 @@ class SublimeYcmdListCompleterCommandsCommand(sublime_plugin.TextCommand):
 
         logger.info('completer commands: %s', completer_commands)
         raise NotImplementedError('unimplemented: show completer commands')
-
-
-DEBUG_LOGGING_DICT_CONFIG = {
-    'version': 1,
-    'filters': {
-        '': {
-            'level': 'WARNING',
-        }
-    },
-    'handlers': {
-        'default': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'default',
-            'level': 'WARNING',
-            'stream': 'ext://sys.stderr',
-        }
-    },
-    'formatters': {
-        'default': {
-            '()': get_smart_truncate_formatter,
-        }
-    },
-    'loggers': {
-        'sublime-ycmd': {
-            'level': 'DEBUG',
-            'handlers': ['default'],
-            'propagate': False,
-        }
-    }
-}
 
 
 def on_change_settings(settings):
@@ -843,7 +868,7 @@ def on_change_settings(settings):
 def plugin_loaded():
     ''' Callback, triggered when the plugin is loaded. '''
     logger.info('initializing sublime-ycmd')
-    configure_logging(DEBUG_LOGGING_DICT_CONFIG)
+    configure_logging()
     _reset_plugin_state()
     logger.info('starting sublime-ycmd')
     bind_on_change_settings(on_change_settings)
@@ -856,55 +881,13 @@ def plugin_unloaded():
     logging.info('stopped sublime-ycmd')
 
 
-def _configure_logging(log_level=None, output_stream=None):
-    '''
-    Configures the logging module (or plugin-specific root logger) to log at
-    the given `log_level` on stream `output_stream`. Formatters, handlers, and
-    filters are added to prettify the logging output.
-    If `log_level` is not provided, it defaults to `logging.WARNING`.
-    If `output_stream` is not provided, it defaults to `sys.stdout`.
-    This is only meant for debugging. Not for use in the actual plugin logic.
-    '''
-    if log_level is None:
-        log_level = logging.WARNING
-    if output_stream is None:
-        output_stream = sys.stdout
-
-    # avoid messing with the root logger
-    # if running under sublime, that would affect all other plugins as well
-    logger_instance = logging.getLogger('sublime-ycmd')
-
-    logger.debug('disabling propagate, and setting level')
-    # disable propagate so logging does not go above this module
-    logger_instance.propagate = False
-
-    # enable all log levels on the top-level logger
-    # the handler/filter will decide what to reject
-    logger_instance.setLevel(logging.DEBUG)
-
-    if logger_instance.hasHandlers():
-        logger_handlers_old = [h for h in logger_instance.handlers]
-        for logger_handler in logger_handlers_old:
-            logger_instance.removeHandler(logger_handler)
-
-    # Don't log after here! Extension filters not set up yet
-    logger_stream = logging.StreamHandler(stream=output_stream)
-    logger_stream.setLevel(log_level)
-    logger_formatter = get_smart_truncate_formatter()
-    logger_stream.setFormatter(logger_formatter)
-    logger_instance.addHandler(logger_stream)
-    # Safe to log again
-
-    logger.debug('successfully configured logging')
-
-
 def main():
     ''' Main function. Executed when this script is executed directly. '''
     cli_argparser = base_cli_argparser(
         description='sublime-ycmd plugin loader',
     )
     cli_args = cli_argparser.parse_args()
-    _configure_logging(cli_args.log_level, cli_args.log_file)
+    configure_logging(cli_args.log_level, cli_args.log_file)
 
     logger.info('starting main function')
 

@@ -89,6 +89,17 @@ def get_default_messagefmt():
     ) % (LEVELNAME_MAXLEN, PATHNAME_MAXLEN, LINENO_MAXLEN, FUNCNAME_MAXLEN)
 
 
+def get_debug_messagefmt():
+    '''
+    Returns a record format string to use for debug logging.
+    This is similar to `get_default_messagefmt`, but includes more fields.
+    '''
+    return (
+        '[%(asctime)s] (%(threadName)s) %(levelname)s '
+        '%(name)s:%(lineno)d %(funcName)s %(message)s'
+    )
+
+
 def get_default_format_props():
     '''
     Returns a map from record attribute names to desired max smart-truncation
@@ -129,14 +140,12 @@ def get_smart_truncate_formatter(fmt=None, datefmt=None, props=None):
     return formatter
 
 
-def get_basic_formatter(fmt=None, datefmt=None):
+def get_debug_formatter(fmt=None, datefmt=None):
     '''
-    Generates and returns a `logging.Formatter` with defaults.
-    If any parameter is omitted, a default one is calculated using the
-    `get_default_` helpers above.
+    Generates and returns a `logging.Formatter` with debug defaults.
     '''
     if fmt is None:
-        fmt = get_default_messagefmt()
+        fmt = get_debug_messagefmt()
     if datefmt is None:
         datefmt = get_default_datefmt()
 

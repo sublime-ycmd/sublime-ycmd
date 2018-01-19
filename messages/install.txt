@@ -1,6 +1,6 @@
 YouCompleteMe for Sublime Text 3
 
-To use this plugin, YCMD must be installed. Instructions for downloading and
-building ycmd can be found at: https://github.com/Valloric/ycmd
+To use this plugin, ycmd must be installed. See the README for a quick-start,
+or the settings for all available options.
 
-See the default settings for all available options.
+https://github.com/sublime-ycmd/sublime-ycmd

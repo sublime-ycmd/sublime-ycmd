@@ -535,7 +535,7 @@ class Server(object):
             self.wait_for_status(Server.RUNNING, timeout=wait_status_timeout)
         except TimeoutError as e:
             self._logger.warning(
-                'server not ready, dropping due to timeout: %r', e,
+                'server not ready, dropping due to timeout: %r', e, exc_info=e,
             )
             return None
 
@@ -660,9 +660,9 @@ class Server(object):
                 response_data = None
 
         except http.client.HTTPException as e:
-            self._logger.error('error during ycmd request: %s', e)
+            self._logger.error('error during ycmd request: %s', e, exc_info=e)
         except ConnectionError as e:
-            self._logger.error(
+            self._logger.debug(
                 'connection error, ycmd server may be dead: %s', e,
             )
 
