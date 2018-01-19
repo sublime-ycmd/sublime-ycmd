@@ -373,11 +373,6 @@ def load_settings(filename=SUBLIME_SETTINGS_FILENAME):
     the file (i.e. not the absolute/relative path to it).
     '''
     logger.debug('loading settings from: %s', filename)
-    logger.critical('load_settings reference: %r', sublime.load_settings)
-    try:
-        logger.critical('source: %s', sublime._source)
-    finally:
-        pass
     settings = sublime.load_settings(filename)
 
     logger.debug('parsing/extracting settings')

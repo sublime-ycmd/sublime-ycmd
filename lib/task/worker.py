@@ -32,7 +32,7 @@ def spawn_worker(pool, name=None):
         try:
             worker_instance.run()
         except Exception as e:
-            logger.critical(
+            logger.error(
                 'unhandled exception during worker thread loop: %r', e,
             )
 

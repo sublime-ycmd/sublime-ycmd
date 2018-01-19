@@ -250,7 +250,7 @@ class Server(object):
         try:
             ycmd_process_handle.start()
         except ValueError as e:
-            self._logger.critical(
+            self._logger.error(
                 'failed to launch ycmd server, argument error: %s', e,
             )
             _check_and_remove_settings_tmp()
