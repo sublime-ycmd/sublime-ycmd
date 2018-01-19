@@ -26,8 +26,12 @@ from ..subl.constants import (
     SUBLIME_SETTINGS_YCMD_SERVER_KEYS,
     SUBLIME_SETTINGS_TASK_POOL_KEYS,
 )
+from ..subl.errors import (
+    SettingsError,
+)
 from ..util.dict import merge_dicts
 from ..util.fs import (
+    resolve_abspath,
     resolve_binary_path,
     default_python_binary_path,
 )
@@ -71,7 +75,10 @@ class Settings(object):
         instance.
         TODO : note the setting keys, note that all variables are reset
         '''
-        assert isinstance(settings, (sublime.Settings, dict))
+        if not isinstance(settings, (sublime.Settings, dict)):
+            raise TypeError(
+                'settings must be sublime.Settings or dict: %r' % settings
+            )
 
         # this logic relies on both instance types having a `get` method
         self._ycmd_root_directory = settings.get('ycmd_root_directory', None)
@@ -101,7 +108,11 @@ class Settings(object):
         self._sublime_ycmd_logging_dictconfig_base = \
             settings.get('sublime_ycmd_logging_dictconfig_base', {})
 
-        self._normalize()
+        try:
+            self._normalize()
+        except (TypeError, ValueError):
+            # whatever, we tried
+            pass
 
     def _normalize(self):
         '''
@@ -110,6 +121,21 @@ class Settings(object):
         This will calculate things like the default settings path based on the
         ycmd root directory, or the python binary based on the system PATH.
         '''
+        if not self._ycmd_root_directory:
+            logger.debug(
+                'no ycmd root directory set, skipping setting normalization'
+            )
+            return
+
+        resolved_ycmd_root_directory = \
+            resolve_abspath(self._ycmd_root_directory)
+        if resolved_ycmd_root_directory != self._ycmd_root_directory:
+            logger.debug(
+                'resolved ycmd root directory: %r -> %r',
+                self._ycmd_root_directory, resolved_ycmd_root_directory,
+            )
+            self._ycmd_root_directory = resolved_ycmd_root_directory
+
         if not self._ycmd_default_settings_path:
             ycmd_root_directory = self._ycmd_root_directory
             if ycmd_root_directory:
@@ -392,6 +418,134 @@ def bind_on_change_settings(callback,
     callback(initial_settings)
 
     return initial_settings
+
+
+def validate_settings(settings):
+    '''
+    Checks `settings` for invalid/missing values. May raise `SettingsError`.
+    This only checks for type-mismatches and missing settings. It does not
+    check anything on the file system, as that could block.
+    If there are no issues, this returns without doing anything. Otherwise,
+    this will raise an exception of type `SettingsError`.
+    '''
+    if not isinstance(settings, Settings):
+        raise TypeError('settings must be Settings: %r' % (settings))
+
+    ycmd_root_directory = settings.ycmd_root_directory
+
+    ycmd_default_settings_path = settings.ycmd_default_settings_path
+    ycmd_python_binary_path = settings.ycmd_python_binary_path
+    ycmd_language_whitelist = settings.ycmd_language_whitelist
+    ycmd_language_blacklist = settings.ycmd_language_blacklist
+    ycmd_language_filetype = settings.ycmd_language_filetype
+    ycmd_log_level = settings.ycmd_log_level
+    ycmd_log_file = settings.ycmd_log_file
+    ycmd_keep_logs = settings.ycmd_keep_logs
+    ycmd_force_semantic_completion = \
+        settings.ycmd_force_semantic_completion
+    # sublime_ycmd_background_threads = \
+    #     settings.sublime_ycmd_background_threads
+    # sublime_ycmd_logging_dictconfig_overrides = \
+    #     settings.sublime_ycmd_logging_dictconfig_overrides
+    # sublime_ycmd_logging_dictconfig_base = \
+    #     settings.sublime_ycmd_logging_dictconfig_base
+
+    # required settings
+    if not ycmd_root_directory:
+        raise SettingsError(
+            'ycmd root directory must be provided, got: %r' %
+            (ycmd_root_directory),
+            type=SettingsError.MISSING,
+            key='ycmd_root_directory', value=ycmd_root_directory,
+        )
+
+    # types
+    def _desc_from_key(key):
+        ''' Calculates a description from a settings key. '''
+        return key.replace('_', ' ')
+
+    def check_str(key, value, optional=True):
+        if optional and value is None:
+            return
+
+        if not isinstance(value, str):
+            raise SettingsError(
+                '%s must be a str: %r' % (_desc_from_key(key), value),
+                type=SettingsError.TYPE, key=key, value=value,
+            )
+
+    def check_bool(key, value, optional=True):
+        if optional and value is None:
+            return
+
+        if not (value is True or value is False):
+            raise SettingsError(
+                '%s must be a bool: %r' % (_desc_from_key(key), value),
+                type=SettingsError.TYPE, key=key, value=value,
+            )
+
+    def check_list_str(key, value, optional=True):
+        if optional and value is None:
+            return
+
+        if not isinstance(value, (list, tuple)):
+            raise SettingsError(
+                '%s must be a list: %r' % (_desc_from_key(key), value),
+                type=SettingsError.TYPE, key=key, value=value,
+            )
+
+        bad_items = list(v for v in value if not isinstance(v, str))
+        if not bad_items:
+            # everything is valid
+            return
+
+        raise SettingsError(
+            '%s must have str entries: [ %s ]' % (
+                _desc_from_key(key),
+                ', '.join('%r' % (v,) for v in bad_items),
+            ),
+            type=SettingsError.TYPE, key=key, value=value,
+        )
+
+    def check_dict_str(key, value, optional=True):
+        if optional and value is None:
+            return
+
+        if not isinstance(value, (dict)):
+            raise SettingsError(
+                '%s must be a dict: %r' % (_desc_from_key(key), value),
+                type=SettingsError.TYPE, key=key, value=value,
+            )
+
+        bad_keys = list(
+            k for k in value if not isinstance(value.get(k, None), str)
+        )
+        if not bad_keys:
+            # everything is valid
+            return
+
+        raise SettingsError(
+            '%s must have str entries: { %s }' % (
+                _desc_from_key(key),
+                ', '.join('%r: %r' % (k, value[k]) for k in bad_keys),
+            ),
+            type=SettingsError.TYPE, key=key, value=value,
+        )
+
+    check_str('ycmd_root_directory', ycmd_root_directory)
+    check_str('ycmd_default_settings_path', ycmd_default_settings_path)
+    check_str('ycmd_python_binary_path', ycmd_python_binary_path)
+    check_list_str('ycmd_language_whitelist', ycmd_language_whitelist)
+    check_list_str('ycmd_language_blacklist', ycmd_language_blacklist)
+    check_dict_str('ycmd_language_filetype', ycmd_language_filetype)
+    check_str('ycmd_log_level', ycmd_log_level)
+    # TODO : Once log file path is supported, allow string values for log file.
+    check_bool('ycmd_log_file', ycmd_log_file)
+    check_bool('ycmd_keep_logs', ycmd_keep_logs)
+    check_bool(
+        'ycmd_force_semantic_completion', ycmd_force_semantic_completion,
+    )
+    # TODO : Check remaining setting values.
 
 
 def has_same_ycmd_settings(settings1, settings2):

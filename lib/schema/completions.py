@@ -8,6 +8,7 @@ TODO : Rename these. The naming scheme makes no sense.
 '''
 
 import logging
+import re
 
 from ..schema.request import RequestParameters
 from ..util.format import json_parse
@@ -101,6 +102,15 @@ class Diagnostics(object):
 
     def __init__(self, diagnostics=None):
         self._diagnostics = diagnostics
+
+    def __iter__(self):
+        if self._diagnostics:
+            return iter(self._diagnostics)
+
+    def __len__(self):
+        if not self._diagnostics:
+            return 0
+        return len(self._diagnostics)
 
     def __str__(self):
         if not self._diagnostics:
@@ -211,12 +221,50 @@ class CompletionOption(object):
 
 class DiagnosticError(object):
 
+    UNKNOWN_EXTRA_CONF = 'UnknownExtraConf'
+
     def __init__(self, exception_type=None, message=None, traceback=None,
                  file_types=None):
         self._exception_type = exception_type
         self._message = message
         self._traceback = traceback
         self._file_types = file_types
+
+    def is_unknown_extra_conf(self):
+        '''
+        Returns `True` if the diagnostic indicates an unknown extra
+        configuration file. The user needs to confirm that they want to load
+        and use it, as it may be unsafe otherwise.
+        '''
+        return self._exception_type == DiagnosticError.UNKNOWN_EXTRA_CONF
+
+    def unknown_extra_conf_path(self):
+        assert self.is_unknown_extra_conf(), \
+            'diagnostic type must be %s: %s' % \
+            (DiagnosticError.UNKNOWN_EXTRA_CONF, self._exception_type)
+
+        if not self._message:
+            logger.warning(
+                'failed to get unknown extra conf path, '
+                'no error message available'
+            )
+            return None
+
+        path_re = re.compile(r'Found (.*)\. Load\?')
+        path_match = path_re.search(self._message)
+
+        if path_match:
+            return path_match.group(1)
+
+        return None
+
+    @property
+    def exception_type(self):
+        return self._exception_type
+
+    @property
+    def message(self):
+        return self._message
 
     def __repr__(self):
         repr_params = {
@@ -352,7 +400,9 @@ def _parse_diagnostic(node, file_types=None):
             message=message, traceback=traceback,
         )
 
-    raise NotImplementedError('unimplemented: diagnostic warnings')
+    raise NotImplementedError(
+        'unimplemented: diagnostic does not have exception type'
+    )
 
 
 def parse_diagnostics(json, request_parameters=None):
@@ -380,10 +430,24 @@ def parse_diagnostics(json, request_parameters=None):
         logger.debug('no errors or diagnostics to report')
         return Diagnostics(diagnostics=None)
 
-    diagnostics = list(
-        _parse_diagnostic(m, file_types=file_types) for m in json_errors
-    )
+    def _try_parse_diagnostic(node):
+        try:
+            return _parse_diagnostic(node, file_types=file_types)
+        except ValueError as e:
+            logger.warning('diagnostic has unexpected format: %r', e)
+        except NotImplementedError as e:
+            logger.warning('unhandled diagnostic format: %r', e)
+        except Exception as e:
+            logger.error('error while parsing diagnostic: %r', e)
+        return None
 
+    def _iter_diagnostics(errors=json_errors):
+        for node in json_errors:
+            parsed = _try_parse_diagnostic(node)
+            if parsed:
+                yield parsed
+
+    diagnostics = list(_iter_diagnostics())
     return Diagnostics(diagnostics=diagnostics)
 
 

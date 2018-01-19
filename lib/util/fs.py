@@ -18,7 +18,8 @@ def is_directory(path):
     Returns true if the supplied `path` refers to a valid directory, and
     false otherwise.
     '''
-    assert isinstance(path, str), 'path must be a str: %r' % (path)
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
     return os.path.exists(path) and os.path.isdir(path)
 
 
@@ -27,7 +28,8 @@ def is_file(path):
     Returns true if the supplied `path` refers to a valid plain file, and
     false otherwise.
     '''
-    assert isinstance(path, str), 'path must be a str: %r' % (path)
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
     return os.path.exists(path) and os.path.isfile(path)
 
 
@@ -36,7 +38,8 @@ def get_directory_name(path):
     Returns the directory name for the file at `path`. If `path` refers to
     a directory, the parent directory is returned.
     '''
-    assert isinstance(path, str), 'path must be a str: %r' % (path)
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
     head, tail = os.path.split(path)
     if not tail and head != path:
         # stripped a trailing directory separator, so redo it
@@ -51,7 +54,8 @@ def get_base_name(path):
     directory, the directory name is returned. If `path` refers to a mount
     point, the base name will be `None`.
     '''
-    assert isinstance(path, str), 'path must be a str: %r' % (path)
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
     head, tail = os.path.split(path)
     if tail:
         return tail
@@ -69,8 +73,10 @@ def load_json_file(path, encoding='utf-8'):
     cannot be parsed as JSON.
     The `encoding` parameter is used when initially reading the file.
     '''
-    assert isinstance(path, str), 'path must be a str: %r' % (path)
-    assert isinstance(encoding, str), 'encoding must be a str: %r' % (encoding)
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
+    if not isinstance(encoding, str):
+        raise TypeError('encoding must be a str: %r' % (encoding))
 
     if not is_file(path):
         logger.warning('path does not seem to refer to a valid file: %s', path)
@@ -105,7 +111,12 @@ def resolve_abspath(path, start=None):
     which is assumed to be an absolute path.
     If `start` is not provided, the current working directory is used.
     '''
-    assert isinstance(path, str), 'path must be a str: %r' % (path)
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
+
+    # attempt to expand things like '~/' before proceeding
+    path = os.path.expanduser(path)
+    path = os.path.expandvars(path)
 
     if os.path.isabs(path):
         logger.debug('path is already absolute: %s', path)
@@ -135,7 +146,8 @@ def resolve_binary_path(binpath, workingdir=None, *pathdirs):
         environment variable are used.
     If no path is found, this will return `None`.
     '''
-    assert isinstance(binpath, str), 'binpath must be a str: %r' % binpath
+    if not isinstance(binpath, str):
+        raise TypeError('binpath must be a str: %r' % binpath)
 
     if os.path.isabs(binpath):
         logger.debug(
@@ -214,7 +226,8 @@ def _split_path_components(path):
     e.g.    '/usr/lib' -> ['', usr', 'lib']
             'C:\\Users' -> ['C:', 'Users']
     '''
-    assert isinstance(path, str), 'path must be a str: %r' % (path)
+    if not isinstance(path, str):
+        raise TypeError('path must be a str: %r' % (path))
     primary_dirsep = os.sep
     secondary_dirsep = os.altsep
 
@@ -285,14 +298,14 @@ def _commonpath_polyfill(paths):
     valid path. To get the valid path from it, we need to ensure that the
     string ends in a directory separator. Anything else is considered invalid.
     '''
-
     if not paths:
-        raise ValueError('Paths are invalid: %r' % (paths))
+        raise ValueError('paths are invalid: %r' % (paths))
+
     # NOTE : the `zip` logic below is slow... only do it if necessary:
     if len(paths) == 1:
-        path = paths[0]
-        logger.debug('only one path, returning it: %s', path)
-        return path
+        first_path = paths[0]
+        logger.debug('only one path, returning it: %s', first_path)
+        return first_path
 
     path_components = [_split_path_components(path) for path in paths]
     logger.debug(
@@ -327,7 +340,7 @@ def _commonpath_polyfill(paths):
     )
 
     if not common_path_components:
-        raise ValueError('Paths do not have a common ancestor')
+        raise ValueError('paths do not have a common ancestor')
 
     # ugh, `ntpath` won't join absolute paths correctly, so ensure that the
     # first item always ends in a directory separator

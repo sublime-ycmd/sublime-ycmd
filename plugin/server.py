@@ -26,7 +26,10 @@ from ..lib.task.pool import (
 )
 from ..lib.util.lock import lock_guard
 from ..lib.ycmd.server import Server
-from ..lib.ycmd.start import StartupParameters
+from ..lib.ycmd.start import (
+    StartupParameters,
+    check_startup_parameters,
+)
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -186,14 +189,24 @@ class SublimeYcmdServerManager(object):
                 view_working_dir,
             )
 
-            # create an empty handle and then fill it in off-thread
-            server = Server()
-            self._servers.add(server)
-
             server_startup_parameters = self._generate_startup_parameters(view)
+            # give them a quick non-blocking check to catch potential errors
+            try:
+                check_startup_parameters(server_startup_parameters)
+            except Exception as e:
+                logger.warning(
+                    'invalid parameters, cannot start server: %r', e
+                )
+                # abort, don't follow through and set it up
+                return None
+
             logger.debug(
                 'using startup parameters: %r', server_startup_parameters,
             )
+
+            # create an empty handle and then fill it in off-thread
+            server = Server()
+            self._servers.add(server)
 
             self._task_pool.submit(server.start, server_startup_parameters)
             logger.debug('initializing server off-thread: %r', server)
@@ -363,7 +376,7 @@ class SublimeYcmdServerManager(object):
         return notify_future
 
     @lock_guard()
-    def notify_exit(self, view, parse_file=True):
+    def notify_exit(self, view):
         '''
         Sends a notification to the ycmd server that the file for `view` has
         been deactivated. This will allow the server to release caches.
@@ -392,6 +405,42 @@ class SublimeYcmdServerManager(object):
         notify_future = self._task_pool.submit(
             notify_exit_async,
             server=server, request_params=request_params,
+        )   # type: concurrent.futures.Future
+
+        return notify_future
+
+    @lock_guard()
+    def notify_use_extra_conf(self, view, extra_conf_path, load=True):
+        '''
+        Sends a notification to the ycmd server that the extra configuration
+        file at `extra_conf_path` may be used.
+
+        If `load` is `True`, then the extra configuration file is loaded.
+        Otherwise, the server is notified to ignore the file instead.
+        '''
+        if not isinstance(extra_conf_path, str):
+            raise TypeError(
+                'extra conf path must be a str: %r' % (extra_conf_path)
+            )
+
+        server = self.get(view)
+        if not server:
+            logger.warning('failed to get server for view: %r', view)
+            return None
+
+        if load:
+            def notify_use_conf(server=server,
+                                extra_conf_path=extra_conf_path):
+                server.load_extra_conf(extra_conf_path)
+        else:
+            def notify_use_conf(server=server,
+                                extra_conf_path=extra_conf_path):
+                server.ignore_extra_conf(extra_conf_path)
+
+        notify_use_conf_async = notify_use_conf
+        notify_future = self._task_pool.submit(
+            notify_use_conf_async,
+            server=server, extra_conf_path=extra_conf_path,
         )   # type: concurrent.futures.Future
 
         return notify_future

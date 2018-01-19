@@ -44,19 +44,21 @@ from ..util.str import (
 )
 from ..util.sys import get_unused_port
 from ..ycmd.constants import (
-    YCMD_HMAC_SECRET_LENGTH,
-    YCMD_HMAC_HEADER,
-    YCMD_HANDLER_SHUTDOWN,
-    YCMD_HANDLER_DEFINED_SUBCOMMANDS,
-    YCMD_HANDLER_DEBUG_INFO,
-    YCMD_HANDLER_GET_COMPLETIONS,
-    YCMD_HANDLER_EVENT_NOTIFICATION,
-    YCMD_HANDLER_HEALTHY,
-    YCMD_EVENT_FILE_READY_TO_PARSE,
-    YCMD_EVENT_BUFFER_VISIT,
     YCMD_EVENT_BUFFER_UNLOAD,
-    YCMD_EVENT_INSERT_LEAVE,
+    YCMD_EVENT_BUFFER_VISIT,
     YCMD_EVENT_CURRENT_IDENTIFIER_FINISHED,
+    YCMD_EVENT_FILE_READY_TO_PARSE,
+    YCMD_EVENT_INSERT_LEAVE,
+    YCMD_HANDLER_DEBUG_INFO,
+    YCMD_HANDLER_DEFINED_SUBCOMMANDS,
+    YCMD_HANDLER_EVENT_NOTIFICATION,
+    YCMD_HANDLER_GET_COMPLETIONS,
+    YCMD_HANDLER_HEALTHY,
+    YCMD_HANDLER_IGNORE_EXTRA_CONF,
+    YCMD_HANDLER_LOAD_EXTRA_CONF,
+    YCMD_HANDLER_SHUTDOWN,
+    YCMD_HMAC_HEADER,
+    YCMD_HMAC_SECRET_LENGTH,
 )
 from ..ycmd.start import (
     StartupParameters,
@@ -538,7 +540,7 @@ class Server(object):
             return None
 
         assert request_params is None or \
-            isinstance(request_params, RequestParameters), \
+            isinstance(request_params, (RequestParameters, dict)), \
             '[internal] request parameters is not RequestParameters: %r' % \
             (request_params)
         assert method is None or isinstance(method, str), \
@@ -548,7 +550,15 @@ class Server(object):
 
         if has_params:
             self._logger.debug('generating json body from parameters')
-            json_params = request_params.to_json()
+            if isinstance(request_params, dict):
+                json_params = request_params.copy()
+            elif isinstance(request_params, RequestParameters):
+                json_params = request_params.to_json()
+            else:
+                raise TypeError(
+                    'request parameters must be RequestParameters: %r' %
+                    (request_params)
+                )
             body = json_serialize(json_params)
         else:
             json_params = None
@@ -692,8 +702,6 @@ class Server(object):
             'received completion results: %s', truncate(completion_data),
         )
 
-        # TODO : Handle exceptions for completions and diagnostics.
-        # TODO : Display diagnostics in the status bar, or just return them.
         completion_response = parse_completions(
             completion_data, request_params,
         )
@@ -701,12 +709,35 @@ class Server(object):
             'parsed completion response: %r', completion_response,
         )
 
-        completions = completion_response.completions
-        # diagnostics = completion_response.diagnostics
-        # self._logger.debug('parsed completions: %r', completions)
-        # self._logger.debug('parsed diagnostics: %r', diagnostics)
+        return completion_response
 
-        return completions
+    def load_extra_conf(self, extra_conf_path, timeout=None):
+        assert isinstance(extra_conf_path, str), \
+            'extra configuration path must be a str: %r' % (extra_conf_path)
+
+        request_params = {
+            'filepath': extra_conf_path,
+        }
+        return self._send_request(
+            YCMD_HANDLER_LOAD_EXTRA_CONF,
+            request_params=request_params,
+            method='POST',
+            timeout=timeout,
+        )
+
+    def ignore_extra_conf(self, extra_conf_path, timeout=None):
+        assert isinstance(extra_conf_path, str), \
+            'extra configuration path must be a str: %r' % (extra_conf_path)
+
+        request_params = {
+            'filepath': extra_conf_path,
+        }
+        return self._send_request(
+            YCMD_HANDLER_IGNORE_EXTRA_CONF,
+            request_params=request_params,
+            method='POST',
+            timeout=timeout,
+        )
 
     def _notify_event(self, event_name, request_params, method='POST'):
         assert isinstance(request_params, RequestParameters), \

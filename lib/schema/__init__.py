@@ -9,4 +9,6 @@ from .request import RequestParameters      # noqa
 from .completions import (                  # noqa
     Completions,
     CompletionOption,
+    Diagnostics,
+    DiagnosticError,
 )

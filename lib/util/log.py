@@ -83,10 +83,10 @@ def get_default_messagefmt():
     '''
     Returns a record format string for use in logging configuration.
     '''
-    return \
-        '[%%(asctime)s] %%(levelname)%ds %%(pathname)%ds:%%(lineno)-%dd ' \
-        '%%(funcName)-%ds %%(message)s' % \
-        (LEVELNAME_MAXLEN, PATHNAME_MAXLEN, LINENO_MAXLEN, FUNCNAME_MAXLEN)
+    return (
+        '[%%(asctime)s] %%(levelname)%ds '
+        '%%(pathname)%ds:%%(lineno)-%dd %%(funcName)-%ds %%(message)s'
+    ) % (LEVELNAME_MAXLEN, PATHNAME_MAXLEN, LINENO_MAXLEN, FUNCNAME_MAXLEN)
 
 
 def get_default_format_props():
@@ -129,6 +129,28 @@ def get_smart_truncate_formatter(fmt=None, datefmt=None, props=None):
     return formatter
 
 
+def get_basic_formatter(fmt=None, datefmt=None):
+    '''
+    Generates and returns a `logging.Formatter` with defaults.
+    If any parameter is omitted, a default one is calculated using the
+    `get_default_` helpers above.
+    '''
+    if fmt is None:
+        fmt = get_default_messagefmt()
+    if datefmt is None:
+        datefmt = get_default_datefmt()
+
+    assert isinstance(fmt, str), 'fmt must be a str: %r' % (fmt)
+    assert isinstance(datefmt, str), 'datefmt must be a str: %r' % (datefmt)
+
+    formatter = logging.Formatter(
+        fmt=fmt,
+        datefmt=datefmt,
+    )
+
+    return formatter
+
+
 # Used to strip common prefixes from script paths (namely, absolute paths)
 _SY_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -156,8 +178,12 @@ def strip_common_path_prefix(basepath, relativeto=_SY_LIB_DIR):
     # Since we know it starts with the prefix, just use a slice to get the rest
     common_path_prefix_len = len(common_path_prefix_str)
     tmp_stripped_prefix_path = basepath[common_path_prefix_len:]
+    path_strip_characters = (
+        os.path.sep if os.path.sep else '' +
+        os.path.altsep if os.path.altsep else ''
+    )
     cleaned_stripped_prefix_path = \
-        tmp_stripped_prefix_path.strip(os.path.sep + os.path.altsep)
+        tmp_stripped_prefix_path.strip(path_strip_characters)
     return cleaned_stripped_prefix_path
 
 
@@ -219,7 +245,9 @@ def smart_truncate(basestr, maxlen):
         'invalid maximum length: %r' % maxlen
 
     # If it looks like a path, strip away the common prefix
-    if os.path.sep in basestr or os.path.altsep in basestr:
+    has_sep = os.path.sep and os.path.sep in basestr
+    has_altsep = os.path.altsep and os.path.altsep in basestr
+    if has_sep or has_altsep:
         # Yes, looks like a path
         basestr = strip_common_path_prefix(basestr)
 

@@ -17,20 +17,29 @@ from .lib.util.log import (
 from .lib.schema import (
     Completions,
     CompletionOption,
+    Diagnostics,
+    DiagnosticError,
 )
+from .lib.subl.errors import PluginError
 from .lib.subl.settings import (
     Settings,
     bind_on_change_settings,
+    validate_settings,
     has_same_ycmd_settings,
     has_same_task_pool_settings,
 )
 from .lib.subl.view import (
+    View,
     get_path_for_view,
     get_file_types,
 )
 from .lib.ycmd.start import StartupParameters
 
 from .plugin.server import SublimeYcmdServerManager
+from .plugin.ui import (
+    display_plugin_error,
+    prompt_load_extra_conf,
+)
 from .plugin.view import SublimeYcmdViewManager
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
@@ -56,7 +65,7 @@ def configure_logging(dict_config):
     try:
         logging.config.dictConfig(dict_config)
     except Exception as e:
-        logger.warning('failed to configure logging: %r', e)
+        logger.warning('failed to configure logging: %r', e, exc_info=e)
 
 
 class SublimeYcmdState(object):
@@ -86,7 +95,6 @@ class SublimeYcmdState(object):
         The settings should be an instance of `Settings`. See `lib.subl` for
         helpers to generate these settings.
 
-        TODO : Shutdown/reconfigure only what's necessary:
         If there are changes to the ycmd server settings, then the state will
         automatically stop all currently running servers. They will be
         relaunched with the new parameters when a completion request is made.
@@ -97,6 +105,13 @@ class SublimeYcmdState(object):
         '''
         assert isinstance(settings, Settings), \
             'settings must be Settings: %r' % (settings)
+
+        try:
+            validate_settings(settings)
+        except PluginError as e:
+            # always treat it as fatal, don't continue after displaying it
+            display_plugin_error(e)
+            return
 
         logging_dictconfig = settings.sublime_ycmd_logging_dictconfig
         if logging_dictconfig:
@@ -140,6 +155,9 @@ class SublimeYcmdState(object):
         logger.debug('successfully configured with settings: %s', settings)
         self._settings = settings
 
+    def is_configured(self):
+        return self._settings is not None
+
     def activate_view(self, view):
         '''
         Registers and notifies the ycmd server to prepare for events on the
@@ -156,11 +174,8 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, ignoring activate event')
             return False
 
-        view = self._view_manager[view]             # type: View
-        server = self._server_manager.get(view)     # type: Server
-        if not server:
-            logger.debug('no server for view, ignoring activate event')
-            return False
+        view = self._view_manager[view]     # type: View
+
         if not view:
             logger.debug('no view wrapper, ignoring activate event')
             return False
@@ -172,6 +187,14 @@ class SublimeYcmdState(object):
             logger.debug('file has no associated file types, ignoring it')
             # in this case, return true to indicate that this is acceptable
             return True
+        if not self.enabled_for_scopes(view):
+            logger.debug('not enabled for view, ignoring activate event')
+            return True
+
+        server = self._server_manager.get(view)     # type: Server
+        if not server:
+            logger.debug('no server for view, ignoring activate event')
+            return False
 
         # TODO : Use view manager to determine when file needs to be re-parsed.
         parse_file = True
@@ -216,11 +239,7 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, ignoring deactivate event')
             return False
 
-        view = self._view_manager[view]             # type: View
-        server = self._server_manager.get(view)     # type: Server
-        if not server:
-            logger.debug('no server for view, ignoring deactivate event')
-            return False
+        view = self._view_manager[view]     # type: View
         if not view:
             logger.debug('no view wrapper, ignoring deactivate event')
             return False
@@ -232,6 +251,14 @@ class SublimeYcmdState(object):
             logger.debug('file has no associated file types, ignoring it')
             # in this case, return true to indicate that this is acceptable
             return True
+        if not self.enabled_for_scopes(view):
+            logger.debug('not enabled for view, ignoring deactivate event')
+            return True
+
+        server = self._server_manager.get(view)     # type: Server
+        if not server:
+            logger.debug('no server for view, ignoring deactivate event')
+            return False
 
         request_params = view.generate_request_parameters()
         if not request_params:
@@ -273,17 +300,21 @@ class SublimeYcmdState(object):
             logger.debug('no plugin state, cannot provide completions')
             return None
 
-        view = self._view_manager[view]             # type: View
-        server = self._server_manager.get(view)     # type: Server
-        if not server:
-            logger.debug('no server for view, cannot request completions')
-            return None
+        view = self._view_manager[view]     # type: View
         if not view:
             logger.debug('no view wrapper, cannot create request parameters')
             return None
 
         if not view.ready():
             logger.debug('file is not ready for parsing, abort')
+            return None
+        if view.file_types and not self.enabled_for_scopes(view):
+            logger.debug('not enabled for view, abort')
+            return None
+
+        server = self._server_manager.get(view)     # type: Server
+        if not server:
+            logger.debug('no server for view, cannot request completions')
             return None
 
         # don't do a full health check, just check the status and process:
@@ -314,13 +345,19 @@ class SublimeYcmdState(object):
         logger.debug('sending completion request for view')
         try:
             # NOTE : This call blocks!!
-            completions = server.get_code_completions(
+            completion_response = server.get_code_completions(
                 request_params, timeout=0.2,
             )
-        except TimeoutError:
+            completions = completion_response.completions
+            diagnostics = completion_response.diagnostics
+        except TimeoutError:    # noqa
             logger.debug('completion request timed out')
             completions = None
+            diagnostics = None
         logger.debug('got completions for view: %s', completions)
+
+        if diagnostics:
+            self._handle_diagnostics(view, server, diagnostics)
 
         if not completions:
             logger.debug('no completions, returning none')
@@ -359,8 +396,8 @@ class SublimeYcmdState(object):
         return len(self._server_manager)
 
     def __bool__(self):
-        ''' Dummy implementation, to prevent usage of `len` for truthyness. '''
-        return True
+        ''' Returns `True` if plugin is configured and ready. '''
+        return self._settings is not None
 
     def _requires_ycmd_restart(self, settings):
         '''
@@ -395,21 +432,56 @@ class SublimeYcmdState(object):
 
         return has_same_task_pool_settings(self._settings, settings)
 
-    def enabled_for_scopes(self, view, locations):
+    def _handle_diagnostics(self, view, server, diagnostics):
         '''
-        Returns true if completions should be performed at the scopes contained
-        in `locations`. This will apply the language whitelist and blacklist
-        on all points in `locations` using the given `view`.
+        Inspects the results of a completion request for diagnostics and
+        displays them appropriately.
+        If the diagnostic is a server error, this may display a popup to alert
+        the user. If the diagnostic is a linting error, this may display a lint
+        outline at the related file position.
+        '''
+        assert isinstance(diagnostics, Diagnostics), \
+            '[internal] diagnostics must be Diagnostics: %r' % (diagnostics)
+        for diagnostic in diagnostics:
+            if not isinstance(diagnostic, DiagnosticError):
+                logger.debug('unknown diagnostic, ignoring: %r', diagnostic)
+                continue
+
+            if diagnostic.is_unknown_extra_conf():
+                # TODO : Prompt UnknownExtraConf with debounce.
+                extra_conf_path = diagnostic.unknown_extra_conf_path()
+                load_extra_conf = prompt_load_extra_conf(extra_conf_path)
+                self._server_manager.notify_use_extra_conf(
+                    view, extra_conf_path, load=load_extra_conf,
+                )
+            else:
+                logger.debug('unhandled diagnostic, ignoring: %r', diagnostic)
+
+    def enabled_for_scopes(self, view, locations=0):
+        '''
+        Returns `True` if completions should be performed at the scopes
+        contained in `locations`. This will apply the language whitelist and
+        blacklist on all points in `locations` using the given `view`.
+
         If there is more than one location, this will apply the scope check
         to all locations, and only return true if all pass.
+
         Locations may be given as any of the following types:
             `sublime.Selection`, `sublime.Region`, `[sublime.Region]`,
             Point/`int`, `[int]`, RowCol/`(int, int)`, `[(int, int)]`
+        The default of `0` will check against the scope at the first character
+        of the view (which is a good approximation for the view's language).
         '''
-
         if not self._settings:
-            logger.error('plugin has not been configured: %s', self._settings)
+            logger.error('plugin has not been configured: %r', self._settings)
             return False
+
+        if isinstance(view, View):
+            # remove wrapper, we need the raw view APIs
+            view = view.view
+
+        if not view or not isinstance(view, sublime.View):
+            raise TypeError('view must be sublime.View: %r' % (view))
 
         language_whitelist = self._settings.ycmd_language_whitelist
         language_blacklist = self._settings.ycmd_language_blacklist
@@ -497,7 +569,7 @@ class SublimeYcmdState(object):
         '''
         Returns a wrapped `View` for the given `sublime.View` in the view
         manager, if one exists. Does NOT create one if it doesn't exist, just
-        returns None.
+        returns `None`.
         If `view` is already a `View`, it is returned as-is.
         '''
         view_manager = self._view_manager
@@ -517,7 +589,7 @@ _SY_PLUGIN_STATE = None     # type: SublimeYcmdState
 def _reset_plugin_state():
     ''' Clears the existing plugin state, and reinitializes a new one. '''
     global _SY_PLUGIN_STATE
-    if _SY_PLUGIN_STATE:
+    if _SY_PLUGIN_STATE is not None:
         logger.info('clearing previous plugin state')
         assert isinstance(_SY_PLUGIN_STATE, SublimeYcmdState), \
             '[internal] inconsistent plugin state, ' \
@@ -537,7 +609,7 @@ def _get_plugin_state():
     If an instance hasn't been initialized yet, this will return `None`.
     '''
     global _SY_PLUGIN_STATE
-    if not _SY_PLUGIN_STATE:
+    if _SY_PLUGIN_STATE is None:
         logger.error('no plugin state has been initialized')
         return None
 
@@ -558,20 +630,17 @@ class SublimeYcmdCompleter(sublime_plugin.EventListener):
             logger.debug('no plugin state, ignoring query completions')
             return None
 
-        completion_options = None
+        if not state.enabled_for_scopes(view, locations):
+            logger.debug('not enabled for view, ignoring completion request')
+            return None
+
         try:
-            if state.enabled_for_scopes(view, locations):
-                completion_options = state.completions_for_view(view)
-            else:
-                logger.debug(
-                    'completions are not enabled for that language/scope, '
-                    'not requesting completions from ycmd'
-                )
+            completion_options = state.completions_for_view(view)
         except Exception as e:
             logger.debug('failed to get completions: %s', e, exc_info=e)
+            completion_options = None
 
         logger.debug('got completions: %s', completion_options)
-
         return completion_options
 
     def on_load(self, view):    # type: (sublime.View) -> None
@@ -611,6 +680,7 @@ class SublimeYcmdListServersCommand(sublime_plugin.TextCommand):
         window = self.view.window()
         if not window:
             logger.warning('failed to get window, cannot display servers')
+            # TODO : Handle this error with the `ui`.
             return
 
         servers = state.servers
@@ -651,6 +721,7 @@ class SublimeYcmdShowViewInfo(sublime_plugin.TextCommand):
 
         if not window:
             logger.warning('no window, cannot display info')
+            # TODO : Handle this error with the `ui`.
             return
 
         server = state.lookup_server(view)
@@ -692,6 +763,7 @@ class SublimeYcmdStartServer(sublime_plugin.TextCommand):
 
         if not window:
             logger.warning('no window, cannot display info')
+            # TODO : Handle this error with the `ui`.
             return
 
         server = state.server_manager.get_server_for_view(view)
@@ -715,6 +787,7 @@ class SublimeYcmdListCompleterCommandsCommand(sublime_plugin.TextCommand):
 
         if not window:
             logger.warning('no window, cannot display info')
+            # TODO : Handle this error with the `ui`.
             return
 
         server = state.server_manager.get_server_for_view(view)
@@ -760,7 +833,7 @@ def on_change_settings(settings):
 
     state = _get_plugin_state()
 
-    if not state:
+    if state is None:
         logger.critical('cannot reconfigure plugin, no plugin state exists')
     else:
         logger.debug('reconfiguring plugin state')

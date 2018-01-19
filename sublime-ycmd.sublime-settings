@@ -21,6 +21,10 @@
   "ycmd_language_whitelist": [
     "source.c",
     "source.c++",
+
+    // enable more languages by adding more scopes:
+    // "source.js",
+    // "source.python",
   ],
 
   // ycmd/plugin language blacklist
@@ -87,13 +91,18 @@
   "sublime_ycmd_background_threads": 0,
 
   // logging configuration
+  // not yet supported: this sets the logging level for the plugin
+  // "sublime_ycmd_log_level": null,
+
+  // for better control over the logging, the entire configuration may be
+  // provided as an object
   // the user-configurable settings here are merged into the default dictionary
   // configuration below to generate the final logging dictionary configuration
   //
   // just include the portions to override/add to, e.g.:
-  //  "sublime_ycmd_logging_dictconfig_overrides": {
-  //    "filters": { "": { "level": "DEBUG" } }
-  //  }
+  // "sublime_ycmd_logging_dictconfig_overrides": {
+  //   "handlers": { "default": { "level": "DEBUG" } }
+  // }
   "sublime_ycmd_logging_dictconfig_overrides": {},
 
   // these are the base/default settings for logging
@@ -115,13 +124,27 @@
       // default handler - streams to stderr
       "default": {
         // configurable level: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
-        "level": "WARNING",
+        "level": "CRITICAL",
 
         // should not need to override this, but can be overriden
         // must restart plugin to apply changes
         "class": "logging.StreamHandler",
         "formatter": "default",
         "stream": "ext://sys.stderr",
+      },
+      // file handler - not used by default, but useful for debugging
+      "logfile": {
+        "level": "DEBUG",
+        "class": "logging.NullHandler",
+        "formatter": "full",
+
+        // fill this out in the override to write out a separate log file
+        // "filename": "sublime-ycmd.log",
+
+        // copy these in as well:
+        // "class": "logging.handlers.RotatingFileHandler",
+        // "maxBytes": 1024000,
+        // "backupCount": 3,
       }
     },
 
@@ -135,6 +158,9 @@
         // "datefmt": "whatever date/timestamp format here",
         // "props": {"fieldname": maxlen, ...}
         // e.g. "props": {"funcName": 4}
+      },
+      "full": {
+        "()": "ext://sublime-ycmd.lib.util.log.get_basic_formatter",
       }
     },
 
