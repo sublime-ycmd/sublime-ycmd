@@ -165,10 +165,10 @@ Temporary log files will be generated for each server and retained even after
 the server exits. These logs are generally not required, but may be useful.
 
 ## Tests
-To run the unit-test suite, simply execute `runtests.py`:
+To run the unit-test suite, simply execute `tests/runtests.py`:
 
 ```
-python3 runtests.py
+python3 tests/runtests.py
 ```
 
 The tests are not yet complete. It tests some basic low-level operations, but

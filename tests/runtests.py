@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 '''
-runtests.py
+tests/runtests.py
 Unit test runner. Without any arguments, this runs all available tests. Flags
 may be used to selectively run tests, or just show some diagnostic information.
 Log output is automatically captured by this script.
@@ -15,15 +15,20 @@ import unittest
 
 if __name__ == '__main__':
     # add import path and load with proper absolute imports
-    project_dir = os.path.dirname(__file__)
-    sys.path.append(project_dir)
+    test_dir = os.path.dirname(__file__)
+    project_dir = os.path.abspath(os.path.join(test_dir, '..'))
+    sys.path.insert(0, project_dir)
 
     from cli.args import base_cli_argparser
     from lib.util.log import get_smart_truncate_formatter
 else:
-    # use relative imports to avoid messing with import paths
-    from .cli.args import base_cli_argparser
-    from .lib.util.log import get_smart_truncate_formatter
+    try:
+        # use relative imports to avoid messing with import paths
+        from ..cli.args import base_cli_argparser
+        from ..lib.util.log import get_smart_truncate_formatter
+    except (ImportError, ValueError):
+        # whatever, we tried
+        pass
 
 logger = logging.getLogger('sublime-ycmd.' + __name__)
 
@@ -184,7 +189,8 @@ def main():
 
     logger.debug('initialized logger, about to load tests')
 
-    project_dir = os.path.dirname(__file__)
+    test_dir = os.path.dirname(__file__)
+    project_dir = os.path.join(test_dir, '..')
     test_suite = unittest.defaultTestLoader.discover(
         'tests', pattern='*.py', top_level_dir=project_dir,
     )
