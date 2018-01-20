@@ -49,7 +49,7 @@
   // the log file should be null or a string:
   //    null    - write log output to the console
   //    "path"  - append log output to the file at "path"
-  "sublime_ycmd_log_level": null,
+  "sublime_ycmd_log_level": "critical",
   "sublime_ycmd_log_file": null,
 
   // number of background threads to use for processing events

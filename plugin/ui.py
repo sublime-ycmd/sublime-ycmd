@@ -10,7 +10,6 @@ TODO : Add linting handlers here to display linting errors from completers.
 '''
 
 import logging
-import re
 
 from ..lib.schema import (
     DiagnosticError,
@@ -49,7 +48,22 @@ def display_plugin_error(err):
         return
 
     error_message = '%s %s' % (PLUGIN_MESSAGE_PREFIX, error_details)
-    sublime.error_message(error_message)
+    # grab first line (for pretty printing)
+    status_line = error_message.split('\n', 1)[0]
+
+    logger.critical('%s\n%s', status_line, error_message)
+
+    def get_window():
+        try:
+            return sublime.active_window()
+        except (AttributeError, TypeError):
+            return None
+
+    window = get_window()
+    if window:
+
+        # display it in active window's status line
+        window.status_message(status_line)
 
 
 def display_diagnostic_error(err):

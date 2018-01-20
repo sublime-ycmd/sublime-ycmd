@@ -866,7 +866,7 @@ def on_change_settings(settings):
 def plugin_loaded():
     ''' Callback, triggered when the plugin is loaded. '''
     logger.info('initializing sublime-ycmd')
-    configure_logging()
+    configure_logging(log_level=logging.CRITICAL)
     _reset_plugin_state()
     logger.info('starting sublime-ycmd')
     bind_on_change_settings(on_change_settings)
