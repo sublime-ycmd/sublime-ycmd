@@ -818,7 +818,7 @@ class SublimeYcmdEditSettings(sublime_plugin.TextCommand):
             return
 
         settings_base_file = \
-            '${packages}/sublime-ycmd/sublime-ycmd.sublime-settings'
+            '${packages}/YouCompleteMe/sublime-ycmd.sublime-settings'
         settings_placeholder = (
             '{\n'
             '\t\"ycmd_root_directory\": \"$0\"\n'

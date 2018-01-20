@@ -10,7 +10,7 @@
           "caption": "Preferences",
           "command": "edit_settings",
           "args": {
-            "base_file": "${packages}/sublime-ycmd/sublime-ycmd.sublime-settings",
+            "base_file": "${packages}/YouCompleteMe/sublime-ycmd.sublime-settings",
             "default": "{\n\t\"ycmd_root_directory\": \"$0\"\n}\n",
           }
         }, {
@@ -19,19 +19,19 @@
           "caption": "README",
           "command": "open_file",
           "args": {
-            "file": "${packages}/sublime-ycmd/README.md"
+            "file": "${packages}/YouCompleteMe/README.md"
           }
         }, {
           "caption": "LICENSE",
           "command": "open_file",
           "args": {
-            "file": "${packages}/sublime-ycmd/LICENSE"
+            "file": "${packages}/YouCompleteMe/LICENSE"
           }
         }, {
           "caption": "Settings – Default",
           "command": "open_file",
           "args": {
-            "file": "${packages}/sublime-ycmd/sublime-ycmd.sublime-settings"
+            "file": "${packages}/YouCompleteMe/sublime-ycmd.sublime-settings"
           }
         }, {
           "caption": "Settings – User",
