@@ -1,0 +1,4 @@
+sublime-ycmd 1.0.0 changelog:
+    - added quick-start and logging instructions to README
+    - added shortcuts to edit plugin settings
+    - disabled debug-mode/logging by default
