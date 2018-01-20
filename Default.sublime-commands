@@ -1,4 +1,7 @@
 [{
+    "caption": "YouCompleteMe: Edit settings",
+    "command": "sublime_ycmd_edit_settings"
+}, {
     "caption": "YouCompleteMe: List ycmd servers",
     "command": "sublime_ycmd_list_servers"
 }, {

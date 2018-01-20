@@ -729,7 +729,7 @@ class SublimeYcmdCompleter(sublime_plugin.EventListener):
             logger.warning('failed to deactivate view: %r', view)
 
 
-class SublimeYcmdListServersCommand(sublime_plugin.TextCommand):
+class SublimeYcmdListServers(sublime_plugin.TextCommand):
     def run(self, edit):
         state = _get_plugin_state()
         if not state:
@@ -738,7 +738,6 @@ class SublimeYcmdListServersCommand(sublime_plugin.TextCommand):
         window = self.view.window()
         if not window:
             logger.warning('failed to get window, cannot display servers')
-            # TODO : Handle this error with the `ui`.
             return
 
         servers = state.servers
@@ -809,30 +808,29 @@ class SublimeYcmdShowViewInfo(sublime_plugin.TextCommand):
         ], on_select_info)
 
 
-class SublimeYcmdStartServer(sublime_plugin.TextCommand):
+class SublimeYcmdEditSettings(sublime_plugin.TextCommand):
     def run(self, edit):
-        state = _get_plugin_state()
-        if not state:
-            return
-
         view = self.view
         window = view.window()
 
         if not window:
-            logger.warning('no window, cannot display info')
+            logger.error('no window, cannot launch settings')
             return
 
-        server = state.server_manager.get_server_for_view(view)
+        settings_base_file = \
+            '${packages}/sublime-ycmd/sublime-ycmd.sublime-settings'
+        settings_placeholder = (
+            '{\n'
+            '\t\"ycmd_root_directory\": \"$0\"\n'
+            '}\n'
+        )
+        window.run_command('edit_settings', {
+            'base_file': settings_base_file,
+            'default': settings_placeholder,
+        })
 
-        def on_select_server(selection_index):
-            pass
 
-        window.show_quick_panel([
-            ['Server', server.pretty_str()],
-        ], on_select_server)
-
-
-class SublimeYcmdListCompleterCommandsCommand(sublime_plugin.TextCommand):
+class SublimeYcmdListCompleterCommands(sublime_plugin.TextCommand):
     def run(self, edit):
         state = _get_plugin_state()
         if not state:
