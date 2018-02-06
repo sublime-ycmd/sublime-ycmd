@@ -22,7 +22,7 @@ Ensure that ycmd is installed before installing this plugin. See the
 
 Here is an example setup using `brew`:
 
-```
+```bash
 brew install cmake
 
 cd ~/Documents
@@ -38,7 +38,7 @@ Preferences). Fill in the path to the ycmd repository, and save it.
 
 For the example above, the settings would look like:
 
-```
+```json
 {
   "ycmd_root_directory": "~/Documents/ycmd"
 }
@@ -55,7 +55,7 @@ See the [ycmd README][ycmd-ycm-extra-conf] for more information.
 
 Here is a minimal example to start with:
 
-```
+```python
 def FlagsForFile(*args, **kwargs):
     return {
         'flags': [
@@ -64,6 +64,8 @@ def FlagsForFile(*args, **kwargs):
         ],
     }
 ```
+
+Also see [docs/c-family.md](docs/c-family.md) for advanced usage notes.
 
 ### Python
 This should not require any special setup, as ycmd will use Jedi to perform
@@ -83,7 +85,7 @@ See the [Tern docs][ternjs-configuration] for more information.
 
 Here is a minimal example for `node` environments:
 
-```
+```json
 {
   "plugins": {
     "node": {}
@@ -103,7 +105,7 @@ repository path, and the plugin will automatically launch it when needed.
 use the ycmd repository installed along with it. If installed with Vundle,
 it would look something like:
 
-```
+```json
 {
   "ycmd_root_directory": "~/.vim/bundle/YouCompleteMe/third_party/ycmd"
 }
@@ -117,14 +119,14 @@ modify that file, or create a copy of it, and use the plugin setting
 
 For example, create a copy with custom settings:
 
-```
+```bash
 cd ~/Documents/ycmd
 cp ycmd/default_settings.json ycmd/custom_settings.json
 ```
 
 The corresponding plugin settings would be:
 
-```
+```json
 {
   "ycmd_root_directory": "~/Documents/ycmd",
   "ycmd_default_settings_path": "~/Documents/ycmd/ycmd/custom_settings.json"
@@ -140,7 +142,7 @@ can be collected for both the plugin and for ycmd itself.
 
 Use the following plugin settings to collect plugin logs in a separate file:
 
-```
+```json
 {
   "sublime_ycmd_log_level": "debug",
   "sublime_ycmd_log_file": "/tmp/sublime-ycmd.log",
@@ -153,7 +155,7 @@ have related errors in these logs.
 
 Use the following plugin settings to generate ycmd logs as well:
 
-```
+```json
 {
   "ycmd_log_level": "debug",
   "ycmd_log_file": true,
@@ -167,7 +169,7 @@ the server exits. These logs are generally not required, but may be useful.
 ## Tests
 To run the unit-test suite, simply execute `tests/runtests.py`:
 
-```
+```bash
 python3 tests/runtests.py
 ```
 
