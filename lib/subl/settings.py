@@ -71,7 +71,11 @@ class Settings(object):
         Assigns the contents of `settings` to the internal instance variables.
         The settings may be provided as a `dict` or as a `sublime.Settings`
         instance.
-        TODO : note the setting keys, note that all variables are reset
+
+        The accepted settings are listed in the default settings file. They are
+        extracted by this method, if available, or given reasonable defaults.
+
+        After parsing, the settings are normalized based on what's available.
         '''
         if not isinstance(settings, (sublime.Settings, dict)):
             raise TypeError(
@@ -119,7 +123,6 @@ class Settings(object):
         ycmd root directory, or the python binary based on the system PATH.
         '''
         if self._ycmd_root_directory:
-            # TODO : Make ycmd setting normalization its own helper function.
             resolved_ycmd_root_directory = \
                 resolve_abspath(self._ycmd_root_directory)
             if resolved_ycmd_root_directory != self._ycmd_root_directory:
@@ -437,10 +440,10 @@ def validate_settings(settings):
     ycmd_keep_logs = settings.ycmd_keep_logs
     ycmd_force_semantic_completion = \
         settings.ycmd_force_semantic_completion
-    # sublime_ycmd_log_level = settings.sublime_ycmd_log_level
-    # sublime_ycmd_log_file = settings.sublime_ycmd_log_file
-    # sublime_ycmd_background_threads = \
-    #     settings.sublime_ycmd_background_threads
+    sublime_ycmd_log_level = settings.sublime_ycmd_log_level
+    sublime_ycmd_log_file = settings.sublime_ycmd_log_file
+    sublime_ycmd_background_threads = \
+        settings.sublime_ycmd_background_threads
 
     # required settings
     if not ycmd_root_directory:
@@ -473,6 +476,16 @@ def validate_settings(settings):
         if not (value is True or value is False):
             raise SettingsError(
                 '%s must be a bool: %r' % (_desc_from_key(key), value),
+                type=SettingsError.TYPE, key=key, value=value,
+            )
+
+    def check_int(key, value, optional=True):
+        if optional and value is None:
+            return
+
+        if not isinstance(value, int):
+            raise SettingsError(
+                '%s must be an int: %r' % (_desc_from_key(key), value),
                 type=SettingsError.TYPE, key=key, value=value,
             )
 
@@ -531,13 +544,16 @@ def validate_settings(settings):
     check_list_str('ycmd_language_blacklist', ycmd_language_blacklist)
     check_dict_str('ycmd_language_filetype', ycmd_language_filetype)
     check_str('ycmd_log_level', ycmd_log_level)
-    # TODO : Once log file path is supported, allow string values for log file.
     check_bool('ycmd_log_file', ycmd_log_file)
     check_bool('ycmd_keep_logs', ycmd_keep_logs)
     check_bool(
         'ycmd_force_semantic_completion', ycmd_force_semantic_completion,
     )
-    # TODO : Check remaining setting values.
+    check_str('sublime_ycmd_log_level', sublime_ycmd_log_level)
+    check_str('sublime_ycmd_log_file', sublime_ycmd_log_file)
+    check_int(
+        'sublime_ycmd_background_threads', sublime_ycmd_background_threads,
+    )
 
 
 def has_same_ycmd_settings(settings1, settings2):

@@ -7,4 +7,10 @@
 }, {
     "caption": "YouCompleteMe: Show file information",
     "command": "sublime_ycmd_show_view_info"
+}, {
+    "caption": "YouCompleteMe: Get debug info",
+    "command": "sublime_ycmd_get_debug_info"
+}, {
+    "caption": "YouCompleteMe: Manage server",
+    "command": "sublime_ycmd_manage_server"
 }]

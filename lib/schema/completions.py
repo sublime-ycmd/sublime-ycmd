@@ -3,8 +3,6 @@
 '''
 lib/schema/completions.py
 Schema definition for responses from completion requests.
-
-TODO : Rename these. The naming scheme makes no sense.
 '''
 
 import logging
@@ -51,8 +49,6 @@ class Completions(object):
 
     This class behaves like a list. The completion options are ordered by ycmd,
     and this class maintains that ordering.
-
-    TODO : Type checking.
     '''
 
     def __init__(self, completion_options=None, start_column=None):
@@ -95,9 +91,6 @@ class Diagnostics(object):
     response of a completion request. These will indicate potential issues in
     ycmd (e.g. no flags available for clang completion), or potential issues in
     the code itself (e.g. warnings, syntax issues).
-
-    TODO : Type checking.
-    TODO : Classes for the diagnostics and errors.
     '''
 
     def __init__(self, diagnostics=None):
@@ -134,8 +127,6 @@ class CompletionOption(object):
     and how they can be displayed. This base class is used to define the common
     attributes available in all completion options. Subclasses further include
     the metadata specific to each option type.
-
-    TODO : Type checking.
     '''
 
     def __init__(self, menu_info=None, insertion_text=None,
@@ -161,9 +152,9 @@ class CompletionOption(object):
 
         # else, try to get a syntax-specific description
 
-        # TODO : Derministic language-based shortdesc.
-        #        Currently, this uses a `dict` to iterate through the handlers,
-        #        which has arbitrary order.
+        # NOTE : Since a `dict` is used to iterate through language handlers,
+        #        this is technically non-deterministic. That shouldn't really
+        #        matter since source files will only match one language.
         shortdesc_handlers = {
             'python': _shortdesc_python,
             'javascript': _shortdesc_javascript,
@@ -175,7 +166,7 @@ class CompletionOption(object):
                 if shortdesc is not None:
                     return shortdesc
 
-        # TODO : Log this once, or it'll be way too noisy.
+        # TODO : Log unknown completion option types only once.
         # logger.warning(
         #     'unknown completion option type, cannot generate '
         #     'description for option, menu info: %s, %r',
@@ -222,6 +213,7 @@ class CompletionOption(object):
 class DiagnosticError(object):
 
     UNKNOWN_EXTRA_CONF = 'UnknownExtraConf'
+    RUNTIME_ERROR = 'RuntimeError'
 
     def __init__(self, exception_type=None, message=None, traceback=None,
                  file_types=None):
@@ -237,6 +229,13 @@ class DiagnosticError(object):
         and use it, as it may be unsafe otherwise.
         '''
         return self._exception_type == DiagnosticError.UNKNOWN_EXTRA_CONF
+
+    def is_runtime_error(self):
+        '''
+        Returns `True` if the diagnostic indicates a server runtime error.
+        The user needs to fix the underlying issue to get working completions.
+        '''
+        return self._exception_type == DiagnosticError.RUNTIME_ERROR
 
     def unknown_extra_conf_path(self):
         assert self.is_unknown_extra_conf(), \
@@ -257,6 +256,13 @@ class DiagnosticError(object):
             return path_match.group(1)
 
         return None
+
+    def is_compile_flag_missing_error(self):
+        assert self.is_runtime_error(), \
+            'diagnostic type must be %s: %s' % \
+            (DiagnosticError.RUNTIME_ERROR, self._exception_type)
+
+        return self._message and 'no compile flags' in self._message
 
     @property
     def exception_type(self):
@@ -290,7 +296,6 @@ def _parse_json_response(json, ignore_errors=False):
     assert isinstance(parsed_json, dict), \
         '[internal] parsed json is not a dict: %r' % (parsed_json)
 
-    # TODO : Use a concrete class for type checking.
     def _is_error_list(errors):
         if not isinstance(errors, list):
             return False
@@ -298,7 +303,6 @@ def _parse_json_response(json, ignore_errors=False):
             lambda e: isinstance(e, dict), errors
         ))
 
-    # TODO : Use a concrete class for type checking.
     def _is_completions(completions):
         if not isinstance(completions, list):
             return False
@@ -526,7 +530,6 @@ def _shortdesc_python(menu_info):
         '[internal] menu info is not a str: %r' % (menu_info)
 
     if ' = ' in menu_info or menu_info.startswith('instance'):
-        # TODO : Not sure if this is 100% correct... Might not be attributes.
         return SHORTDESC_ATTRIBUTE
 
     if menu_info.startswith('keyword'):

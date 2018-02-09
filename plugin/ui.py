@@ -29,6 +29,21 @@ except ImportError:
 PLUGIN_MESSAGE_PREFIX = '[sublime-ycmd]'
 
 
+def display_status_line(line):
+    def get_window():
+        try:
+            return sublime.active_window()
+        except (AttributeError, TypeError):
+            return None
+
+    window = get_window()
+    if window:
+        # display it in active window's status line
+        window.status_message(line)
+
+    return window
+
+
 def display_plugin_error(err):
     if not isinstance(err, PluginError):
         logger.warning(
@@ -48,22 +63,10 @@ def display_plugin_error(err):
         return
 
     error_message = '%s %s' % (PLUGIN_MESSAGE_PREFIX, error_details)
-    # grab first line (for pretty printing)
-    status_line = error_message.split('\n', 1)[0]
+    status_line = _get_first_line(error_message)
 
     logger.critical('%s\n%s', status_line, error_message)
-
-    def get_window():
-        try:
-            return sublime.active_window()
-        except (AttributeError, TypeError):
-            return None
-
-    window = get_window()
-    if window:
-
-        # display it in active window's status line
-        window.status_message(status_line)
+    display_status_line(status_line)
 
 
 def display_diagnostic_error(err):
@@ -74,6 +77,14 @@ def display_diagnostic_error(err):
         return
 
     raise NotImplementedError('unimplemented: display diagnostic error')
+
+
+def display_plugin_message(message):
+    plugin_message = '%s %s' % (PLUGIN_MESSAGE_PREFIX, message)
+    status_line = _get_first_line(plugin_message)
+
+    logger.info('%s\n%s', status_line, plugin_message)
+    display_status_line(status_line)
 
 
 def prompt_load_extra_conf(path):
@@ -93,6 +104,12 @@ def prompt_load_extra_conf(path):
     prompt_message = '%s %s' % (PLUGIN_MESSAGE_PREFIX, prompt_details)
 
     return sublime.ok_cancel_dialog(prompt_message, 'Load')
+
+
+def _get_first_line(data):
+    if not isinstance(data, str):
+        raise TypeError('data must be a str: %r' % (data))
+    return data.split('\n')[0]
 
 
 def _format_settings_error(err):

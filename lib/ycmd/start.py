@@ -38,9 +38,6 @@ class StartupParameters(object):
     Startup parameters for a ycmd server instance.
     Should include all the necessary configuration for creating the ycmd
     server process. Also calculates defaults for certain parameters.
-
-    TODO : Rename `ycmd_settings_path` to `ycmd_default_settings_path`, and
-           add a `ycmd_temp_settings_path` field to this.
     '''
 
     def __init__(self, ycmd_root_directory=None,
@@ -222,6 +219,10 @@ class StartupParameters(object):
             '_python_binary_path',
             '_server_idle_suicide_seconds',
             '_max_server_wait_time_seconds',
+            '_log_level',
+            '_stdout_log_path',
+            '_stderr_log_path',
+            '_keep_logs',
         ]
         result = StartupParameters()
 
@@ -244,6 +245,10 @@ class StartupParameters(object):
                 self.max_server_wait_time_seconds,
             ),
             ('ycmd_module_directory', self.ycmd_module_directory),
+            ('log_level', self.log_level),
+            ('stdout_log_path', self.stdout_log_path),
+            ('stderr_log_path', self.stderr_log_path),
+            ('keep_logs', self.keep_logs),
         ))
 
     def __str__(self):

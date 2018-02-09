@@ -3,8 +3,6 @@
 '''
 lib/util/log.py
 Contains additional logic to help improve logging output.
-
-TODO : Add helper to use a logfile in this project's directory.
 '''
 
 import collections
@@ -23,9 +21,6 @@ try:
     # pylint: disable=unused-import
     import sublime          # noqa
     import sublime_plugin   # noqa
-
-    # TODO : See if the one-liner solution here works:
-    # logging._srcfile = os.path.normcase(addLevelName.__code__.co_filename)
 
     if hasattr(logging, '_srcfile') and logging._srcfile:
         _python_zip_re = re.compile(

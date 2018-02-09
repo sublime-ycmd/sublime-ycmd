@@ -45,8 +45,6 @@ class SublimeYcmdServerManager(object):
     Generally, each project will have its own associated backend ycmd server.
     This is required for certain completers, like tern, that rely on the
     working directory in order to find imported files.
-
-    TODO : Make this thread-safe. Completion requests may come off-thread.
     '''
 
     def __init__(self):
@@ -167,7 +165,7 @@ class SublimeYcmdServerManager(object):
         if server is not None:
             # ensure server is either starting, or running
             is_server_live = (
-                server.is_starting() or server.is_alive()
+                server.is_starting() or server.is_alive(timeout=0)
             )
 
             if not is_server_live:
@@ -599,7 +597,6 @@ def read_spooled_output(spool):
 
 
 def add_log_file_parameters(startup_parameters, log_file=None):
-    # TODO : Use `add_ycmd_debug_args` to add to the process handle instead.
     if not isinstance(startup_parameters, StartupParameters):
         raise TypeError(
             'startup parameters must be StartupParameters: %r' %

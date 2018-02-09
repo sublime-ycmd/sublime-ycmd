@@ -13,10 +13,6 @@ from .cli.args import (
     base_cli_argparser,
     log_level_str_to_enum,
 )
-from .lib.util.log import (
-    get_smart_truncate_formatter,
-    get_debug_formatter,
-)
 from .lib.schema import (
     Completions,
     CompletionOption,
@@ -36,11 +32,20 @@ from .lib.subl.view import (
     get_path_for_view,
     get_file_types,
 )
+from .lib.util.format import (
+    json_pretty_print,
+    json_flat_iterator,
+)
+from .lib.util.log import (
+    get_smart_truncate_formatter,
+    get_debug_formatter,
+)
 from .lib.ycmd.start import StartupParameters
 
 from .plugin.server import SublimeYcmdServerManager
 from .plugin.ui import (
     display_plugin_error,
+    display_plugin_message,
     prompt_load_extra_conf,
 )
 from .plugin.view import SublimeYcmdViewManager
@@ -403,6 +408,7 @@ class SublimeYcmdState(object):
         logger.debug('sending completion request for view')
         try:
             # NOTE : This call blocks!!
+            # TODO : Allow configurable completion timeout.
             completion_response = server.get_code_completions(
                 request_params, timeout=0.2,
             )
@@ -428,7 +434,7 @@ class SublimeYcmdState(object):
             assert isinstance(completion, CompletionOption), \
                 '[internal] completion is not CompletionOption: %r' % \
                 (completion)
-            # TODO : Calculate trigger properly
+
             st_trigger = completion.text()
             st_shortdesc = completion.shortdesc()
             st_insertion_text = completion.text()
@@ -506,7 +512,6 @@ class SublimeYcmdState(object):
                 continue
 
             if diagnostic.is_unknown_extra_conf():
-                # TODO : Prompt UnknownExtraConf with debounce.
                 extra_conf_path = diagnostic.unknown_extra_conf_path()
                 load_extra_conf = prompt_load_extra_conf(extra_conf_path)
                 self._server_manager.notify_use_extra_conf(
@@ -610,7 +615,8 @@ class SublimeYcmdState(object):
         '''
         server_manager = self._server_manager
         if view in server_manager:
-            return server_manager[view]
+            server = server_manager[view]   # type: Server
+            return server
         return None
 
     @property
@@ -830,24 +836,140 @@ class SublimeYcmdEditSettings(sublime_plugin.TextCommand):
         })
 
 
-class SublimeYcmdListCompleterCommands(sublime_plugin.TextCommand):
+class SublimeYcmdGetDebugInfo(sublime_plugin.TextCommand):
     def run(self, edit):
         state = _get_plugin_state()
         if not state:
             return
 
-        view = self.view
-        window = view.window()
+        view = state.lookup_view(self.view)
+        window = self.view.window()
 
-        if not window:
-            logger.warning('no window, cannot display info')
+        if not view or not view.ready():
+            logger.info('view has not been seen by plugin, ignoring it')
+            display_plugin_message('view is ignored, cannot get debug info')
             return
 
-        server = state.server_manager.get_server_for_view(view)
-        completer_commands = server.get_debug_info()
+        server = state.lookup_server(view)
+        if not server:
+            logger.info('no server for view, cannot get debug info')
+            display_plugin_message('view has no associated ycmd server')
+            return
 
-        logger.info('completer commands: %s', completer_commands)
-        raise NotImplementedError('unimplemented: show completer commands')
+        if not (server.is_starting() or server.is_alive(timeout=0)):
+            logger.info('server is unavailable, cannot get debug info')
+            display_plugin_message('server is unavailable: %s' % (server))
+            return
+
+        request_params = view.generate_request_parameters()
+        if not request_params:
+            logger.info('failed to generate request params, abort')
+            display_plugin_message('failed to generate parameters from view')
+            return
+
+        logger.info('sending request for server debug info: %r', server)
+        try:
+            debug_info = server.get_debug_info(request_params, timeout=1)
+        except TimeoutError:
+            logger.info('request timed out...')
+            display_plugin_message('request timed out, server: %s' % (server))
+            return
+
+        if debug_info:
+            pretty_debug_info = json_pretty_print(debug_info)
+            display_plugin_message('got debug info: %s' % (pretty_debug_info))
+        else:
+            display_plugin_message('got debug info: %s' % (debug_info))
+
+        def on_select_info(selection_index):
+            pass
+
+        if window and debug_info:
+            # NOTE : Quick panel API is very picky, needs to be `list` & `str`:
+            flattened_properties = list(sorted(
+                ([str(k), str(v)] for k, v in json_flat_iterator(debug_info)),
+                key=lambda i: i[0],
+            ))
+            window.show_quick_panel(flattened_properties, on_select_info)
+
+
+class SublimeYcmdManageServer(sublime_plugin.TextCommand):
+    def run(self, edit):
+        state = _get_plugin_state()
+        if not state:
+            return
+
+        view = state.lookup_view(self.view)
+        window = self.view.window()
+        if not view or not view.ready():
+            logger.debug('view has not been seen by plugin, ignoring it')
+            display_plugin_message('view is ignored, cannot manage its server')
+            return
+
+        server = state.lookup_server(view)
+        if not server:
+            logger.debug('no server for view, cannot manage it')
+            display_plugin_message('view has no associated ycmd server')
+            return
+
+        if not (server.is_starting() or server.is_alive(timeout=0)):
+            logger.debug('server is unavailable, cannot manage it')
+            display_plugin_message('server is unavailable: %s' % (server))
+            return
+
+        startup_parameters = server.startup_parameters
+        stdout_log_path = startup_parameters.stdout_log_path
+        stderr_log_path = startup_parameters.stderr_log_path
+
+        def _describe_log_path():
+            if not stdout_log_path or not stderr_log_path:
+                return 'buffered in-memory'
+            if startup_parameters.keep_logs:
+                return 'retained temporary files'
+            return 'auto-deleted temporary files'
+
+        server_desc = server.pretty_str()
+        process_desc = 'process id: %s' % (server.pid)
+        log_desc = _describe_log_path()
+
+        def on_select_item(selection_index):
+            if selection_index == -1:
+                pass
+            elif selection_index == 0:
+                shutdown_server()
+            elif selection_index == 1:
+                kill_server()
+            elif selection_index == 2:
+                open_logs()
+            else:
+                logger.warning(
+                    'unhandled selection index for manage server: %r',
+                    selection_index,
+                )
+                raise ValueError(
+                    'unknown selection, index: %r' % (selection_index)
+                )
+
+        def shutdown_server():
+            server.stop(hard=False, timeout=1)
+
+        def kill_server():
+            server.stop(hard=True, timeout=1)
+
+        def open_logs():
+            if not stdout_log_path or not stderr_log_path:
+                display_plugin_message('cannot display in-memory logs')
+                # TODO : Use `read_spooled_output` to extract logs and display.
+                raise NotImplementedError
+
+            window.open_file(stdout_log_path)
+            window.open_file(stderr_log_path)
+
+        window.show_quick_panel([
+            ['Shutdown', server_desc],
+            ['Kill', process_desc],
+            ['Logs', log_desc],
+        ], on_select_item)
 
 
 def on_change_settings(settings):

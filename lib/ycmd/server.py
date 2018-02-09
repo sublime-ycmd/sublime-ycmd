@@ -72,6 +72,10 @@ logger = logging.getLogger('sublime-ycmd.' + __name__)
 # this logger uses a filter to add server information to all log statements
 _server_logger = logging.getLogger('sublime-ycmd.' + __name__ + '.server')
 
+# time limit for queued requests, in seconds
+# it's a good idea to have one, so requests can't be queued indefinitely
+QUEUED_REQUEST_MAX_WAIT_TIME = 1
+
 
 class Server(object):
     '''
@@ -79,10 +83,6 @@ class Server(object):
     connection to a ycmd server process. Provides a simple-ish way to send
     API requests to the backend, including control functions like stopping and
     pinging the server.
-
-    TODO : Run all this stuff off-thread.
-    TODO : Unit tests.
-    TODO : Don't send requests in `is_alive`, add another method for that.
     '''
 
     NULL = 'Server.NULL'
@@ -100,7 +100,9 @@ class Server(object):
         self._stdout_log_handle = None
         self._stderr_log_handle = None
 
-        # TODO : Track the temporary settings file, and delete on exit.
+        # copy of the startup parameters and temporary file path:
+        self._startup_parameters = None
+        self._settings_tempfile_path = None
 
         self._hostname = None
         self._port = None
@@ -111,9 +113,13 @@ class Server(object):
 
     def reset(self):
         self._status = Server.NULL
+
         self._process_handle = None
         self._stdout_log_handle = None
         self._stderr_log_handle = None
+
+        self._startup_parameters = None
+        self._settings_tempfile_path = None
 
         self._hostname = None
         self._port = None
@@ -222,11 +228,13 @@ class Server(object):
             'successfully prepared server process, about to start it'
         )
 
-        # TODO : Record the temporary settings path, and ensure it is deleted.
         with self._lock:
             self._process_handle = ycmd_process_handle
             self._stdout_log_handle = ycmd_process_handle.filehandles.stdout
             self._stderr_log_handle = ycmd_process_handle.filehandles.stderr
+
+            self._startup_parameters = startup_parameters
+            self._settings_tempfile_path = ycmd_settings_tempfile_path
 
             self.hostname = ycmd_server_hostname
             self.port = ycmd_server_port
@@ -393,27 +401,6 @@ class Server(object):
             (self._process_handle)
         return self._process_handle.communicate(inpt=inpt, timeout=timeout)
 
-    @property
-    @lock_guard()
-    def stdout(self):
-        '''
-        Returns the handle to the ycmd process stdout output.
-
-        Operations on the file handle do not need to be locked, so this handle
-        can be safely returned to any callers.
-        '''
-        return self._stdout_log_handle
-
-    @property
-    @lock_guard()
-    def stderr(self):
-        '''
-        Returns the handle to the ycmd process stderr output.
-
-        Like the stdout output, operations on it do not require the lock.
-        '''
-        return self._stderr_log_handle
-
     def wait_for_status(self, status=None, timeout=None):
         '''
         Waits for the server status to change.
@@ -530,14 +517,16 @@ class Server(object):
                 return None
 
         try:
-            # TODO : Move timeout constant somewhere else.
-            wait_status_timeout = timeout if timeout is not None else 1
+            wait_status_timeout = (
+                timeout if timeout is not None
+                else QUEUED_REQUEST_MAX_WAIT_TIME
+            )
             self.wait_for_status(Server.RUNNING, timeout=wait_status_timeout)
         except TimeoutError as e:
             self._logger.warning(
                 'server not ready, dropping due to timeout: %r', e, exc_info=e,
             )
-            return None
+            raise
 
         assert request_params is None or \
             isinstance(request_params, (RequestParameters, dict)), \
@@ -610,7 +599,7 @@ class Server(object):
             response_status = response.status
             response_reason = response.reason
 
-            # TODO : Move http response parsing somewhere else.
+            # verify response hmac before using it
             response_headers = response.getheaders()
             response_content_type = response.getheader('Content-Type')
             response_content_length = response.getheader('Content-Length', 0)
@@ -624,7 +613,7 @@ class Server(object):
             has_content = response_content_length > 0
             is_content_json = response_content_type == 'application/json'
 
-            # extract response and check hmac
+            # extract response to check hmac
             if has_content:
                 response_content = response.read()
                 with self._lock:
@@ -680,11 +669,12 @@ class Server(object):
             method='POST',
         )
 
-    def get_debug_info(self, request_params):
+    def get_debug_info(self, request_params, timeout=None):
         return self._send_request(
             YCMD_HANDLER_DEBUG_INFO,
             request_params=request_params,
             method='POST',
+            timeout=timeout,
         )
 
     def get_code_completions(self, request_params, timeout=None):
@@ -841,6 +831,47 @@ class Server(object):
         if not isinstance(label, str):
             self._logger.warning('server label is not a str: %r', label)
         self._label = label
+
+    @property
+    @lock_guard()
+    def pid(self):
+        '''
+        Returns the server process ID if running, or `None` otherwise.
+        '''
+        if not self._process_handle:
+            return None
+        return self._process_handle.pid()
+
+    @property
+    @lock_guard()
+    def stdout(self):
+        '''
+        Returns the handle to the ycmd process stdout output.
+
+        Operations on the file handle do not need to be locked, so this handle
+        can be safely returned to any callers.
+        '''
+        return self._stdout_log_handle
+
+    @property
+    @lock_guard()
+    def stderr(self):
+        '''
+        Returns the handle to the ycmd process stderr output.
+
+        Like the stdout output, operations on it do not require the lock.
+        '''
+        return self._stderr_log_handle
+
+    @property
+    @lock_guard()
+    def startup_parameters(self):
+        return self._startup_parameters
+
+    @property
+    @lock_guard()
+    def settings_tempfile_path(self):
+        return self._settings_tempfile_path
 
     @lock_guard()
     def _reset_logger(self):

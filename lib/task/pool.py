@@ -111,10 +111,19 @@ class Pool(object):
 
     def shutdown(self, wait=True, timeout=None):
         '''
-        TODO : Fill `shutdown` description.
+        Posts a quit message to all running workers.
+
+        If `wait` is truthy, then this call will also block until all worker
+        threads have returned. Otherwise, this method will return immediately
+        after posting the quit message (`timeout` will be ignored).
+
+        If `timeout` is given along with `wait`, this call will block for a
+        maximum of `timeout` seconds for each worker to join. Otherwise, this
+        will block indefinitely while waiting for the threads to stop.
 
         The `timeout` parameter is shared between all join operations. It is
-        possible for this function to block for longer than `timeout` seconds.
+        possible for this function to block for longer than `timeout` seconds
+        (i.e. up to a maximum of `num_workers` * `timeout` seconds).
         '''
         with self._lock:
             self._running = False
@@ -158,8 +167,8 @@ def disown_task_pool(task_pool, name=None, daemon=None):
     Shuts down a task pool on a daemon thread. The thread allows the task pool
     to run to completion. Once it is completed, the thread itself terminates.
 
-    TODO : Store a weak ref to the pool, in case we need to hard-stop a buggy
-           one that keeps running indefinitely.
+    NOTE : It is possible to store a weak ref to the pool, just in case.
+           That hasn't been necessary during testing, so don't bother.
     '''
 
     if name is None:
@@ -168,7 +177,6 @@ def disown_task_pool(task_pool, name=None, daemon=None):
     if daemon is None:
         daemon = True
 
-    # Until the TODO is done, the interim solution is to give a grace period.
     # Specify the time limit for shutting down in seconds.
     _TASK_POOL_SHUTDOWN_GRACE = (5 * 60)        # 5 minutes
 

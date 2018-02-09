@@ -198,3 +198,11 @@ class Process(object):
 
         assert self._handle is not None, '[internal] process handle is null'
         self._handle.kill()
+
+    def pid(self):
+        ''' Returns the process ID if running, or `None` otherwise. '''
+        if not self.alive():
+            logger.debug('process not alive, no pid')
+            return None
+
+        return self._handle.pid

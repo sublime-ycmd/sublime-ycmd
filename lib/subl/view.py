@@ -98,8 +98,6 @@ class View(object):
         These parameters include information about the file like the name,
         contents, and file type(s). Additional parameters may still be added to
         the result before passing it off to the server.
-
-        TODO : Use cached values whenever possible.
         '''
         if not self._view:
             logger.error('no view handle has been set')

@@ -60,8 +60,6 @@ class Worker(object):
     It is deliberately left as a plain object though.
 
     This class does not use locking. It is expected that the owners will.
-
-    TODO : Use a log adapter to decorate based on worker info.
     '''
 
     def __init__(self, pool, handle=None):
