@@ -1,0 +1,3 @@
+sublime-ycmd 1.1.0 changelog:
+    - added 'Debug Info' command to query server information
+    - added 'Manage Server' command to stop/inspect a server
