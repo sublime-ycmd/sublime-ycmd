@@ -118,9 +118,8 @@ class SublimeYcmdState(object):
             # leave `working_directory` blank, it gets filled in later
             working_directory=None,
 
-            # TODO : Allow settings to override the defaults for these:
-            server_idle_suicide_seconds=None,
-            max_server_wait_time_seconds=None,
+            server_idle_suicide_seconds=settings.ycmd_idle_suicide_seconds,
+            server_check_interval_seconds=settings.ycmd_check_interval_seconds,
         )
         logger.info(
             'new servers will start with parameters: %s', startup_parameters,

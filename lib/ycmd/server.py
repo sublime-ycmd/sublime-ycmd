@@ -131,7 +131,7 @@ class Server(object):
     def start(self, ycmd_root_directory,
               ycmd_settings_path=None, working_directory=None,
               python_binary_path=None, server_idle_suicide_seconds=None,
-              max_server_wait_time_seconds=None):
+              server_check_interval_seconds=None):
         '''
         Launches a ycmd server process with the given startup parameters. The
         only required startup parameter is `ycmd_root_directory`. If it is a
@@ -152,7 +152,7 @@ class Server(object):
 
         If `server_idle_suicide_seconds` is not provided, a default is used.
 
-        If `max_server_wait_time_seconds` is not provided, a default is used.
+        If `server_check_interval_seconds` is not provided, a default is used.
 
         It is preferable to use the concrete `StartupParameters` class, since
         this ends up constructing one anyway if it isn't already in that form.
@@ -163,7 +163,7 @@ class Server(object):
             working_directory=working_directory,
             python_binary_path=python_binary_path,
             server_idle_suicide_seconds=server_idle_suicide_seconds,
-            max_server_wait_time_seconds=max_server_wait_time_seconds,
+            server_check_interval_seconds=server_check_interval_seconds,
         )
         assert isinstance(startup_parameters, StartupParameters), \
             '[internal] startup parameters is not StartupParameters: %r' % \
@@ -183,8 +183,8 @@ class Server(object):
         python_binary_path = startup_parameters.python_binary_path
         server_idle_suicide_seconds = \
             startup_parameters.server_idle_suicide_seconds
-        max_server_wait_time_seconds = \
-            startup_parameters.max_server_wait_time_seconds
+        server_check_interval_seconds = \
+            startup_parameters.server_check_interval_seconds
 
         ycmd_server_hostname = '127.0.0.1'
         ycmd_server_port = get_unused_port(ycmd_server_hostname)

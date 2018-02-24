@@ -52,6 +52,8 @@ class Settings(object):
         self._ycmd_language_whitelist = None
         self._ycmd_language_blacklist = None
         self._ycmd_language_filetype = {}
+        self._ycmd_idle_suicide_seconds = None
+        self._ycmd_check_interval_seconds = None
 
         self._ycmd_log_level = None
         self._ycmd_log_file = None
@@ -94,6 +96,11 @@ class Settings(object):
             settings.get('ycmd_language_blacklist', None)
         self._ycmd_language_filetype = \
             settings.get('ycmd_language_filetype', {})
+
+        self._ycmd_idle_suicide_seconds = \
+            settings.get('ycmd_idle_suicide_seconds', None)
+        self._ycmd_check_interval_seconds = \
+            settings.get('ycmd_check_interval_seconds', None)
 
         self._ycmd_log_level = settings.get('ycmd_log_level', None)
         self._ycmd_log_file = settings.get('ycmd_log_file', None)
@@ -256,6 +263,24 @@ class Settings(object):
         This will be a dictionary, but may be empty.
         '''
         return self._ycmd_language_filetype
+
+    @property
+    def ycmd_idle_suicide_seconds(self):
+        '''
+        Returns the server idle suicide timeout in seconds.
+        If set, this will be an integer. If unset, this will be `None`, which
+        should use a default timeout.
+        '''
+        return self._ycmd_idle_suicide_seconds
+
+    @property
+    def ycmd_check_interval_seconds(self):
+        '''
+        Returns the subserver health check frequency in seconds.
+        If set, this will be an integer. If unset, this will be `None`, which
+        should use a default frequency.
+        '''
+        return self._ycmd_check_interval_seconds
 
     @property
     def ycmd_log_level(self):
@@ -435,6 +460,8 @@ def validate_settings(settings):
     ycmd_language_whitelist = settings.ycmd_language_whitelist
     ycmd_language_blacklist = settings.ycmd_language_blacklist
     ycmd_language_filetype = settings.ycmd_language_filetype
+    ycmd_idle_suicide_seconds = settings.ycmd_idle_suicide_seconds
+    ycmd_check_interval_seconds = settings.ycmd_check_interval_seconds
     ycmd_log_level = settings.ycmd_log_level
     ycmd_log_file = settings.ycmd_log_file
     ycmd_keep_logs = settings.ycmd_keep_logs
@@ -543,6 +570,8 @@ def validate_settings(settings):
     check_list_str('ycmd_language_whitelist', ycmd_language_whitelist)
     check_list_str('ycmd_language_blacklist', ycmd_language_blacklist)
     check_dict_str('ycmd_language_filetype', ycmd_language_filetype)
+    check_int('ycmd_idle_suicide_seconds', ycmd_idle_suicide_seconds)
+    check_int('ycmd_check_interval_seconds', ycmd_check_interval_seconds)
     check_str('ycmd_log_level', ycmd_log_level)
     check_bool('ycmd_log_file', ycmd_log_file)
     check_bool('ycmd_keep_logs', ycmd_keep_logs)

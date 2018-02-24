@@ -22,8 +22,8 @@ from ..util.fs import (
 from ..ycmd.constants import (
     YCMD_LOG_SPOOL_OUTPUT,
     YCMD_LOG_SPOOL_SIZE,
+    YCMD_DEFAULT_SERVER_CHECK_INTERVAL_SECONDS,
     YCMD_DEFAULT_SERVER_IDLE_SUICIDE_SECONDS,
-    YCMD_DEFAULT_MAX_SERVER_WAIT_TIME_SECONDS,
 )
 from ..ycmd.settings import (
     get_default_settings_path,
@@ -45,14 +45,14 @@ class StartupParameters(object):
                  working_directory=None,
                  python_binary_path=None,
                  server_idle_suicide_seconds=None,
-                 max_server_wait_time_seconds=None):
+                 server_check_interval_seconds=None):
         self._ycmd_root_directory = None
         self._ycmd_settings_path = None
 
         self._working_directory = None
         self._python_binary_path = None
         self._server_idle_suicide_seconds = None
-        self._max_server_wait_time_seconds = None
+        self._server_check_interval_seconds = None
 
         # additional attributes, can be set via the properties
         self._log_level = None
@@ -65,7 +65,7 @@ class StartupParameters(object):
         self.working_directory = working_directory
         self.python_binary_path = python_binary_path
         self.server_idle_suicide_seconds = server_idle_suicide_seconds
-        self.max_server_wait_time_seconds = max_server_wait_time_seconds
+        self.server_check_interval_seconds = server_check_interval_seconds
 
     @property
     def ycmd_root_directory(self):
@@ -136,17 +136,17 @@ class StartupParameters(object):
         self._server_idle_suicide_seconds = server_idle_suicide_seconds
 
     @property
-    def max_server_wait_time_seconds(self):
-        if self._max_server_wait_time_seconds is None:
-            return YCMD_DEFAULT_MAX_SERVER_WAIT_TIME_SECONDS
-        return self._max_server_wait_time_seconds
+    def server_check_interval_seconds(self):
+        if self._server_check_interval_seconds is None:
+            return YCMD_DEFAULT_SERVER_CHECK_INTERVAL_SECONDS
+        return self._server_check_interval_seconds
 
-    @max_server_wait_time_seconds.setter
-    def max_server_wait_time_seconds(self, max_server_wait_time_seconds):
-        if max_server_wait_time_seconds is not None and \
-                not isinstance(max_server_wait_time_seconds, int):
-            raise TypeError(max_server_wait_time_seconds,)
-        self._max_server_wait_time_seconds = max_server_wait_time_seconds
+    @server_check_interval_seconds.setter
+    def server_check_interval_seconds(self, server_check_interval_seconds):
+        if server_check_interval_seconds is not None and \
+                not isinstance(server_check_interval_seconds, int):
+            raise TypeError(server_check_interval_seconds,)
+        self._server_check_interval_seconds = server_check_interval_seconds
 
     @property
     def log_level(self):
@@ -218,7 +218,7 @@ class StartupParameters(object):
             '_working_directory',
             '_python_binary_path',
             '_server_idle_suicide_seconds',
-            '_max_server_wait_time_seconds',
+            '_server_check_interval_seconds',
             '_log_level',
             '_stdout_log_path',
             '_stderr_log_path',
@@ -241,8 +241,8 @@ class StartupParameters(object):
             ('python_binary_path', self.python_binary_path),
             ('server_idle_suicide_seconds', self.server_idle_suicide_seconds),
             (
-                'max_server_wait_time_seconds',
-                self.max_server_wait_time_seconds,
+                'server_check_interval_seconds',
+                self.server_check_interval_seconds,
             ),
             ('ycmd_module_directory', self.ycmd_module_directory),
             ('log_level', self.log_level),
@@ -269,7 +269,7 @@ def to_startup_parameters(ycmd_root_directory,
                           working_directory=None,
                           python_binary_path=None,
                           server_idle_suicide_seconds=None,
-                          max_server_wait_time_seconds=None):
+                          server_check_interval_seconds=None):
     '''
     Internal convenience function. Receives the raw arguments to starting a
     ycmd server and returns a `StartupParameters` instance from it.
@@ -301,10 +301,10 @@ def to_startup_parameters(ycmd_root_directory,
                 'server idle suicide seconds will be ignored: %s',
                 server_idle_suicide_seconds,
             )
-        if max_server_wait_time_seconds is not None:
+        if server_check_interval_seconds is not None:
             logger.warning(
-                'max server wait time seconds will be ignored: %s',
-                max_server_wait_time_seconds,
+                'server check interval seconds will be ignored: %s',
+                server_check_interval_seconds,
             )
 
         return ycmd_root_directory
@@ -321,7 +321,7 @@ def to_startup_parameters(ycmd_root_directory,
         working_directory=working_directory,
         python_binary_path=python_binary_path,
         server_idle_suicide_seconds=server_idle_suicide_seconds,
-        max_server_wait_time_seconds=max_server_wait_time_seconds,
+        server_check_interval_seconds=server_check_interval_seconds,
     )
 
 
@@ -432,8 +432,8 @@ def prepare_ycmd_process(startup_parameters, ycmd_settings_tempfile_path,
     python_binary_path = startup_parameters.python_binary_path
     server_idle_suicide_seconds = \
         startup_parameters.server_idle_suicide_seconds
-    max_server_wait_time_seconds = \
-        startup_parameters.max_server_wait_time_seconds
+    server_check_interval_seconds = \
+        startup_parameters.server_check_interval_seconds
     ycmd_module_directory = startup_parameters.ycmd_module_directory
 
     if YCMD_LOG_SPOOL_OUTPUT:
@@ -462,7 +462,7 @@ def prepare_ycmd_process(startup_parameters, ycmd_settings_tempfile_path,
         '--host=%s' % (ycmd_server_hostname),
         '--port=%s' % (ycmd_server_port),
         '--idle_suicide_seconds=%s' % (server_idle_suicide_seconds),
-        '--check_interval_seconds=%s' % (max_server_wait_time_seconds),
+        '--check_interval_seconds=%s' % (server_check_interval_seconds),
         '--options_file=%s' % (ycmd_settings_tempfile_path),
     ])
 

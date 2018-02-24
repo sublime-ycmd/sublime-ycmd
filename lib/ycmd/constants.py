@@ -45,14 +45,12 @@ YCMD_DEFAULT_SERVER_IDLE_SUICIDE_SECONDS = 5 * 60   # 5 mins
 # YCMD_DEFAULT_SERVER_IDLE_SUICIDE_SECONDS = 3 * 60 * 60  # 3 hrs
 
 '''
-Server will wait at most `int` seconds for a response from a semantic
-completion subserver (e.g. tern, jedi). If the subserver takes too long, ycmd
-can at least return the list of identifiers. The delayed response will get
-cached, and may be used in the next completion request.
+Server will poll subservers every `int` seconds to check health. This allows
+the server to transparently manage semantic completers (e.g. tern, jedi).
 
 User configurable.
 '''
-YCMD_DEFAULT_MAX_SERVER_WAIT_TIME_SECONDS = 5
+YCMD_DEFAULT_SERVER_CHECK_INTERVAL_SECONDS = 5
 
 '''
 Server handlers/routes. The server has an HTTP+JSON api, so these correspond to

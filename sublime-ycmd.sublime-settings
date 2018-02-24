@@ -36,6 +36,16 @@
   // entries in the blacklist have higher priority than those in the whitelist
   "ycmd_language_blacklist": [],
 
+  // ycmd server idle suicide time limit
+  // servers will automatically shut down when idle for this many seconds
+  "ycmd_idle_suicide_seconds": 10800,   // 3 hrs
+  // "ycmd_idle_suicide_seconds": 300,     // 5 mins
+
+  // ycmd subserver check interval
+  // servers will periodically check the health of any subservers (e.g. tern,
+  // jedi) with this interval (in seconds)
+  "ycmd_check_interval_seconds": 5,
+
   // -----
   // plugin settings
 
