@@ -1,0 +1,3 @@
+sublime-ycmd 1.2.0 changelog:
+    - changed default server-idle-suicide time from 5 minutes to 3 hours
+    - added settings for server-idle-suicide time and subserver-check-interval
