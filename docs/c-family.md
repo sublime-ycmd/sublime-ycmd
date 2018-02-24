@@ -94,13 +94,13 @@ extended to trigger on other characters as well. Add entries to the server
 settings file under `"semantic_triggers"`. The value should be an object that
 maps languages (keys) to a list of trigger sequences (values).
 
-For example, the following will trigger semantic completions for includes:
+For example, the following will trigger semantic completions after an `#if`:
 
 ```json
 {
   ...
   "semantic_triggers": {
-    "c,cpp": ["re!^#include\s+\""]
+    "c,cpp": ["re!^#\\s*if\\s+"]
   },
   ...
 }
