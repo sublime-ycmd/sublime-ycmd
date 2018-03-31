@@ -1,0 +1,2 @@
+sublime-ycmd 1.3.0 changelog:
+    - fixed bug when previewing and opening files from the command-palette
