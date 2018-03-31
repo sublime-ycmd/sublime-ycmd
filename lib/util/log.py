@@ -90,8 +90,8 @@ def get_debug_messagefmt():
     This is similar to `get_default_messagefmt`, but includes more fields.
     '''
     return (
-        '[%(asctime)s] (%(threadName)s) %(levelname)s '
-        '%(name)s:%(lineno)d %(funcName)s %(message)s'
+        '[%(asctime)19s] %(threadName)-36s %(levelname)-8s '
+        '%(name) 56s:%(lineno)-4d %(funcName)32s %(message)s'
     )
 
 
