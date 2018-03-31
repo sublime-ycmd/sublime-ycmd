@@ -23,7 +23,10 @@ from ..lib.subl.settings import (
     has_same_ycmd_settings,
     has_same_task_pool_settings,
 )
-from ..lib.subl.view import View
+from ..lib.subl.view import (
+    View,
+    get_file_types,
+)
 from ..lib.ycmd.start import StartupParameters
 
 from ..plugin.log import configure_logging
@@ -161,7 +164,7 @@ class SublimeYcmdState(object):
         if not view.ready():
             logger.debug('file is not ready for parsing, ignoring')
             return False
-        if not view.file_types:
+        if not get_file_types(view):
             logger.debug('file has no associated file types, ignoring it')
             # in this case, return true to indicate that this is acceptable
             return True
@@ -220,7 +223,7 @@ class SublimeYcmdState(object):
         if not view.ready():
             logger.debug('file is not ready for parsing, ignoring')
             return False
-        if not view.file_types:
+        if not get_file_types(view):
             logger.debug('file has no associated file types, ignoring it')
             # in this case, return true to indicate that this is acceptable
             return True
@@ -276,7 +279,7 @@ class SublimeYcmdState(object):
         if not view.ready():
             logger.debug('file is not ready for parsing, abort')
             return None
-        if view.file_types and not self.enabled_for_scopes(view):
+        if get_file_types(view) and not self.enabled_for_scopes(view):
             logger.debug('not enabled for view, abort')
             return None
 

@@ -18,6 +18,7 @@ import concurrent                   # noqa: F401
 from ..lib.subl.view import (
     View,
     get_view_id,
+    get_path_for_window,
     get_path_for_view,
 )
 from ..lib.task.pool import (
@@ -153,14 +154,51 @@ class SublimeYcmdServerManager(object):
 
         view_working_dir = get_path_for_view(view)
 
-        server = None
-        if view_id is not None and view_id in self._view_id_to_server:
-            server = self._view_id_to_server[view_id]
-        elif view_working_dir is not None and \
-                view_working_dir in self._working_directory_to_server:
-            # map the view id to this server as well, for future lookups
-            server = self._working_directory_to_server[view_working_dir]
+        # also inspect the window for a working directory
+        # this is used to decide how to cache the lookup
+        should_cache_view_id = get_path_for_window(view) is not None
+
+        def lookup_by_view_id(view_id=view_id):
+            if view_id is not None and view_id in self._view_id_to_server:
+                return self._view_id_to_server[view_id]
+            return None
+
+        def lookup_by_working_dir(working_dir):
+            if working_dir is not None and \
+                    working_dir in self._working_directory_to_server:
+                return self._working_directory_to_server[working_dir]
+            return None
+
+        def cache_for_view_id(view_id=view_id, server=None):
+            if not view_id:
+                raise ValueError('view id must be an int: %r' % (view_id))
+            if view_id not in self._view_id_to_server:
+                logger.debug(
+                    'caching server by view id: %r -> %r', view_id, server,
+                )
             self._view_id_to_server[view_id] = server
+
+        def cache_for_working_dir(working_dir, server=None):
+            if not working_dir:
+                raise ValueError(
+                    'working directory must be a str: %r' % (working_dir)
+                )
+            if working_dir not in self._working_directory_to_server:
+                logger.debug(
+                    'caching server by working dir: %r -> %r',
+                    working_dir, server,
+                )
+            self._working_directory_to_server[working_dir] = server
+
+        server = lookup_by_view_id(view_id)
+        if server is None:
+            logger.debug('no cached entry for view id: %r', view_id)
+            server = lookup_by_working_dir(view_working_dir)
+            if server is None:
+                logger.debug(
+                    'no cached entry for working directory: %r',
+                    view_working_dir,
+                )
 
         if server is not None:
             # ensure server is either starting, or running
@@ -209,8 +247,9 @@ class SublimeYcmdServerManager(object):
             self._task_pool.submit(server.start, server_startup_parameters)
             logger.debug('initializing server off-thread: %r', server)
 
-        self._view_id_to_server[view_id] = server
-        self._working_directory_to_server[view_working_dir] = server
+        if should_cache_view_id:
+            cache_for_view_id(view_id, server)
+        cache_for_working_dir(view_working_dir, server)
 
         return server   # type: Server
 
@@ -533,14 +572,14 @@ class SublimeYcmdServerManager(object):
             log_file = self._log_file
 
         # now mess with the copy and fill in information from the view
-        add_log_file_parameters(
-            startup_parameters, log_file=log_file,
-        )
-
         view_working_dir = get_path_for_view(view)
         if view_working_dir:
             startup_parameters.working_directory = view_working_dir
         # else, whatever, we tried
+
+        add_log_file_parameters(
+            startup_parameters, log_file=log_file,
+        )
 
         return startup_parameters
 

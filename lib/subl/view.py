@@ -41,27 +41,6 @@ class View(object):
     def __init__(self, view=None):
         self._view = view   # type: sublime.View
         self._cache = None
-        self._recalculate()
-
-    def _recalculate(self):
-        '''
-        Pre-calculates the view properties for the internal view handle. Some
-        properties, like file path, don't need to be recalculated constantly.
-        They can be calculated once, and then re-used to save time.
-        '''
-        self._cache = {}
-
-        if not self._view or not isinstance(self._view, sublime.View):
-            return
-
-        assert isinstance(self._view, sublime.View), \
-            '[internal] view handle is not sublime.View: %r' % (self._view)
-
-        view_path = get_path_for_view(self._view)
-        view_file_types = get_file_types(self._view)
-
-        self._cache['path'] = view_path
-        self._cache['file_types'] = view_file_types
 
     def ready(self):
         '''
@@ -168,18 +147,6 @@ class View(object):
             logger.warning('view is not sublime.View: %r', view)
         self._view = view
 
-    @property
-    def path(self):
-        if self._cache is None:
-            self._cache = {}
-        return self._cache.get('path', None)
-
-    @property
-    def file_types(self):
-        if self._cache is None:
-            self._cache = {}
-        return self._cache.get('file_types', None)
-
     # helpers for using views in other collections
     def __eq__(self, other):
         if other is None:
@@ -255,6 +222,12 @@ class View(object):
             logger.error('no view handle has been set')
             return None
         return self._view.scope_name(point)
+
+    def file_name(self):
+        if not self._view:
+            logger.error('no view handle has been set')
+            return None
+        return self._view.file_name()
 
 
 def get_view_id(view):
@@ -334,11 +307,27 @@ def _get_path_from_window(window):
     return folder_common_ancestor
 
 
-def _get_path_from_view(view):
+def get_path_for_window(view):
+    '''
+    Returns the project directory from the window containing a given `view`.
+    If the containing window is unavailable, this will return `None`.
+    The input parameter can be a `sublime.View` or `sublime.Window` instance.
+    '''
+    if isinstance(view, (View, sublime.View)):
+        window = view.window()
+        if window:
+            logger.debug('found window from view')
+    else:
+        window = view
+
+    return _get_path_from_window(window)
+
+
+def _get_path_from_file(view):
     if view is None:
         logger.debug('no view provided, cannot determine file path')
         return None
-    assert isinstance(view, sublime.View)
+    assert isinstance(view, (View, sublime.View))
 
     logger.debug('extracting file path from view: %s', view)
 
@@ -368,13 +357,6 @@ def get_path_for_view(view):
     assert isinstance(view, (sublime.View, View)), \
         'view must be a View: %r' % (view)
 
-    if isinstance(view, View):
-        cached_path = view.path
-        if cached_path is not None:
-            return cached_path
-        # no pre-calculated value, grab the underlying view to calculate it
-        view = view.view
-
     logger.debug('calculating project directory for view: %s', view)
     window = view.window()
 
@@ -382,46 +364,46 @@ def get_path_for_view(view):
     if path_from_window is not None:
         logger.debug('found project directory from active project/folders')
 
-    path_from_view = _get_path_from_view(view)
-    if path_from_view is not None:
+    path_from_file = _get_path_from_file(view)
+    if path_from_file is not None:
         logger.debug('found directory for file from view')
 
-    # use the two paths (one from window, one from view) as follows:
+    # use the two paths (one from window, one from file) as follows:
     #   1 - both are None
     #       cannot determine, so return None
-    #   2 - window path is None, view path is not None
-    #       return view path as-is
-    #   3 - window path is not None, view path is None
+    #   2 - window path is None, file path is not None
+    #       return file path as-is
+    #   3 - window path is not None, file path is None
     #       return window path as-is
     #   4 - both are not None
     #       take common ancestor directory of the two
-    #       it's likely that the view path is a descendent of the window path
+    #       it's likely that the file path is a descendent of the window path
     #       if not, that's fine, the common ancestor will take care of that
-    if path_from_window is None and path_from_view is None:
-        logger.debug('could not determine directory from window or view')
+    if path_from_window is None and path_from_file is None:
+        logger.debug('could not determine directory from window or file')
         return None
 
-    if path_from_window is not None and path_from_view is not None:
-        logger.debug('returning common ancestor of window and view paths')
+    if path_from_window is not None and path_from_file is not None:
+        logger.debug('returning common ancestor of window and file paths')
         path_common_ancestor = get_common_ancestor([
-            path_from_window, path_from_view,
+            path_from_window, path_from_file,
         ])
         if path_common_ancestor:
             return path_common_ancestor
-        # otherwise, prefer to use the view's directory
-        return path_from_view
+        # otherwise, prefer to use the file's directory
+        return path_from_file
 
     if path_from_window is not None:
-        logger.debug('no path from view, so using path from window as-is')
+        logger.debug('no path from file, so using path from window as-is')
         return path_from_window
 
-    if path_from_view is not None:
-        logger.debug('no path from window, so using path from view as-is')
-        return path_from_view
+    if path_from_file is not None:
+        logger.debug('no path from window, so using path from file as-is')
+        return path_from_file
 
     assert False, \
-        'unhandled case, path from window, view: %r, %r' % \
-        (path_from_window, path_from_view)
+        'unhandled case, path from window, file: %r, %r' % \
+        (path_from_window, path_from_file)
     return None
 
 
@@ -440,21 +422,12 @@ def get_file_types(view, scope_position=0):
     assert isinstance(scope_position, int), \
         'scope position must be an int: %r' % (scope_position)
 
-    if isinstance(view, View):
-        if scope_position == 0:
-            cached_file_types = view.file_types
-            if cached_file_types is not None:
-                return cached_file_types
-        # no pre-calculated value, grab the underlying view to calculate it
-        view = view.view
-
     view_size = view.size()
     if scope_position == 0 and view_size == 0:
         # corner-case: view is empty
         logger.debug('empty view, no file types')
         return []
-    assert \
-        scope_position >= 0 and scope_position < view_size, \
+    assert scope_position >= 0 and scope_position < view_size, \
         'scope position must be an int(0, %d): %r' % \
         (view_size, scope_position)
 
